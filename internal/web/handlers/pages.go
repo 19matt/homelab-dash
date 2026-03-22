@@ -25,6 +25,20 @@ var TemplateFuncMap = template.FuncMap{
 		return (a / b) * c
 	},
 	"tof": func(v uint64) float64 { return float64(v) },
+	"severityName": func(s int) string {
+		names := map[int]string{0: "info", 1: "low", 2: "medium", 3: "high", 4: "critical"}
+		if n, ok := names[s]; ok {
+			return n
+		}
+		return "unknown"
+	},
+	"severityBadge": func(s int) string {
+		badges := map[int]string{0: "badge-unknown", 1: "badge-low", 2: "badge-warn", 3: "badge-fail", 4: "badge-critical"}
+		if b, ok := badges[s]; ok {
+			return b
+		}
+		return "badge-unknown"
+	},
 }
 
 // renderTemplate executes a named template and returns the HTML.

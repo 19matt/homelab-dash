@@ -1,0 +1,55 @@
+{{ define "security-content" }}
+<h1>Security</h1>
+
+<div class="summary-bar" id="security-summary"
+     hx-get="/fragments/security-summary" hx-trigger="every 5m" hx-swap="innerHTML">
+    <div class="badge badge-unknown">info: {{ .Summary.info }}</div>
+    <div class="badge badge-low">low: {{ .Summary.low }}</div>
+    <div class="badge badge-warn">medium: {{ .Summary.medium }}</div>
+    <div class="badge badge-fail">high: {{ .Summary.high }}</div>
+    <div class="badge badge-critical">critical: {{ .Summary.critical }}</div>
+</div>
+
+<div style="margin-bottom: 1rem;">
+    <a href="/api/security/report" class="btn">Download Report</a>
+    <span class="muted" style="margin-left: 1rem;">Last 30 days</span>
+</div>
+
+<table>
+    <thead>
+        <tr>
+            <th>Severity</th>
+            <th>Target</th>
+            <th>Scanner</th>
+            <th>Title</th>
+            <th>When</th>
+        </tr>
+    </thead>
+    <tbody>
+        {{ range .Findings }}
+        <tr class="finding-row" style="cursor:pointer"
+            onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'table-row':'none'">
+            <td><span class="badge {{ severityBadge .Severity }}">{{ severityName .Severity }}</span></td>
+            <td>{{ .Target }}</td>
+            <td>{{ .Scanner }}</td>
+            <td>{{ .Title }}</td>
+            <td class="mono">{{ .Timestamp.Format "Jan 02 15:04" }}</td>
+        </tr>
+        <tr class="finding-detail" style="display:none">
+            <td colspan="5" style="padding: 0.75rem; background: var(--surface-hover);">
+                <strong>Description:</strong> {{ .Description }}<br>
+                <strong>Remediation:</strong> <em>{{ .Remediation }}</em>
+            </td>
+        </tr>
+        {{ end }}
+    </tbody>
+</table>
+{{ end }}
+
+{{ define "fragment-security-summary" }}
+<div class="badge badge-unknown">info: {{ .Summary.info }}</div>
+<div class="badge badge-low">low: {{ .Summary.low }}</div>
+<div class="badge badge-warn">medium: {{ .Summary.medium }}</div>
+<div class="badge badge-fail">high: {{ .Summary.high }}</div>
+<div class="badge badge-critical">critical: {{ .Summary.critical }}</div>
+{{ end }}
