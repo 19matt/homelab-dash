@@ -117,6 +117,25 @@ type HostData struct {
 	RecentChecks  []checker.CheckResult
 }
 
+// SecurityData is the data for the security page.
+type SecurityData struct {
+	PageData
+	Findings []FindingRow
+	Summary  map[string]int
+}
+
+// FindingRow is a row in the findings table.
+type FindingRow struct {
+	ID          int64
+	Timestamp   time.Time
+	Target      string
+	Scanner     string
+	Title       string
+	Description string
+	Severity    int
+	Remediation string
+}
+
 // OverviewHandler renders the overview page.
 func OverviewHandler(tmpl *template.Template, s *store.Store, vmCollectors []*proxmox.VMCollector) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -417,4 +436,59 @@ func formatUptime(seconds int64) string {
 		return "< 1m"
 	}
 	return strings.Join(parts, " ")
+}
+
+// SecurityHandler renders the security page.
+func SecurityHandler(tmpl *template.Template, s *store.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		findings, _ := s.GetFindings(r.Context())
+		summary, _ := s.GetFindingsSummary(r.Context())
+
+		var rows []FindingRow
+		for _, f := range findings {
+			rows = append(rows, FindingRow{
+				ID:          f.ID,
+				Timestamp:   f.Timestamp,
+				Target:      f.Target,
+				Scanner:     f.Scanner,
+				Title:       f.Title,
+				Description: f.Description,
+				Severity:    f.Severity,
+				Remediation: f.Remediation,
+			})
+		}
+
+		contentData := struct {
+			Findings []FindingRow
+			Summary  map[string]int
+		}{
+			Findings: rows,
+			Summary:  summary,
+		}
+
+		data := SecurityData{
+			PageData: PageData{
+				ActivePage: "security",
+				Content:    renderTemplate(tmpl, "security-content", contentData),
+			},
+			Findings: rows,
+			Summary:  summary,
+		}
+
+		tmpl.ExecuteTemplate(w, "layout", data)
+	}
+}
+
+// SecuritySummaryFragment returns the security summary badges for htmx refresh.
+func SecuritySummaryFragment(tmpl *template.Template, s *store.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		summary, _ := s.GetFindingsSummary(r.Context())
+
+		data := struct {
+			Summary map[string]int
+		}{Summary: summary}
+
+		w.Header().Set("Content-Type", "text/html")
+		tmpl.ExecuteTemplate(w, "fragment-security-summary", data)
+	}
 }

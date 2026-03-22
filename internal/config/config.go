@@ -19,11 +19,14 @@ type Config struct {
 
 	// Parsed from Defaults.Interval, defaults to 60s.
 	Interval time.Duration `yaml:"-"`
+	// Parsed from Defaults.ScanInterval, defaults to 6h.
+	ScanInterval time.Duration `yaml:"-"`
 }
 
 // DefaultsConfig holds global default settings.
 type DefaultsConfig struct {
-	Interval string `yaml:"interval"`
+	Interval     string `yaml:"interval"`
+	ScanInterval string `yaml:"scan_interval"`
 }
 
 // ServerConfig holds HTTP server settings.
@@ -157,6 +160,20 @@ func (c *Config) Validate() error {
 			return fmt.Errorf("defaults.interval must be positive")
 		}
 		c.Interval = d
+	}
+
+	// Parse scan interval
+	if c.Defaults.ScanInterval == "" {
+		c.ScanInterval = 6 * time.Hour
+	} else {
+		d, err := time.ParseDuration(c.Defaults.ScanInterval)
+		if err != nil {
+			return fmt.Errorf("defaults.scan_interval: invalid duration %q: %w", c.Defaults.ScanInterval, err)
+		}
+		if d <= 0 {
+			return fmt.Errorf("defaults.scan_interval must be positive")
+		}
+		c.ScanInterval = d
 	}
 
 	seen := make(map[string]bool)

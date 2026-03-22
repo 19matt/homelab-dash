@@ -20,10 +20,21 @@ type collectorEntry struct {
 	interval  time.Duration
 }
 
-// Scheduler orchestrates periodic execution of checkers and collectors.
+type scanEntry struct {
+	engine   ScanRunner
+	interval time.Duration
+}
+
+// ScanRunner is the interface for scan engines that can be scheduled.
+type ScanRunner interface {
+	Run(ctx context.Context) error
+}
+
+// Scheduler orchestrates periodic execution of checkers, collectors, and scans.
 type Scheduler struct {
 	checkers   []checkerEntry
 	collectors []collectorEntry
+	scans      []scanEntry
 	store      *store.Store
 	interval   time.Duration
 	broadcast  func(target, check, status string, latencyMs int64)
@@ -62,7 +73,12 @@ func (sc *Scheduler) SetBroadcastFunc(fn func(target, check, status string, late
 	sc.broadcast = fn
 }
 
-// Run starts goroutines for each registered checker and collector.
+// AddScanEngine registers a scan engine to run at the given interval.
+func (sc *Scheduler) AddScanEngine(engine ScanRunner, interval time.Duration) {
+	sc.scans = append(sc.scans, scanEntry{engine: engine, interval: interval})
+}
+
+// Run starts goroutines for each registered checker, collector, and scan.
 // It blocks until ctx is cancelled.
 func (sc *Scheduler) Run(ctx context.Context) {
 	for i, e := range sc.checkers {
@@ -70,6 +86,9 @@ func (sc *Scheduler) Run(ctx context.Context) {
 	}
 	for i, e := range sc.collectors {
 		go sc.runCollector(ctx, e, time.Duration(i)*100*time.Millisecond)
+	}
+	for i, e := range sc.scans {
+		go sc.runScan(ctx, e, time.Duration(i)*time.Second)
 	}
 	<-ctx.Done()
 }
@@ -156,4 +175,34 @@ func (sc *Scheduler) executeCollector(ctx context.Context, c collector.Collector
 	}
 
 	log.Printf("collector %s: collected %d points", c.Name(), len(points))
+}
+
+func (sc *Scheduler) runScan(ctx context.Context, e scanEntry, delay time.Duration) {
+	if delay > 0 {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(delay):
+		}
+	}
+
+	ticker := time.NewTicker(e.interval)
+	defer ticker.Stop()
+
+	sc.executeScan(ctx, e.engine)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			sc.executeScan(ctx, e.engine)
+		}
+	}
+}
+
+func (sc *Scheduler) executeScan(ctx context.Context, engine ScanRunner) {
+	if err := engine.Run(ctx); err != nil {
+		log.Printf("scan engine: error: %v", err)
+	}
 }

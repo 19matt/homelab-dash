@@ -78,3 +78,9 @@ func (e *ScanEngine) RunAll(ctx context.Context) ([]Finding, error) {
 	log.Printf("scan engine: completed, found %d findings across %d targets", len(allFindings), len(e.targets))
 	return allFindings, nil
 }
+
+// Run executes all scans and discards the findings (for scheduler interface).
+func (e *ScanEngine) Run(ctx context.Context) error {
+	_, err := e.RunAll(ctx)
+	return err
+}

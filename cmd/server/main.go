@@ -13,6 +13,7 @@ import (
 	"github.com/homelab/homelab-dash/internal/checker"
 	"github.com/homelab/homelab-dash/internal/config"
 	"github.com/homelab/homelab-dash/internal/integration/proxmox"
+	"github.com/homelab/homelab-dash/internal/scanner"
 	"github.com/homelab/homelab-dash/internal/scheduler"
 	"github.com/homelab/homelab-dash/internal/store"
 	"github.com/homelab/homelab-dash/internal/web"
@@ -73,6 +74,14 @@ func main() {
 
 		log.Printf("proxmox integration enabled: nodes=%v", cfg.Integrations.Proxmox.Nodes)
 	}
+
+	// Security scanner
+	scanEngine := scanner.NewEngine(s, cfg.Targets)
+	scanEngine.AddScanner(&scanner.PortScanner{})
+	scanEngine.AddScanner(&scanner.TLSScanner{})
+	scanEngine.AddScanner(&scanner.HeaderScanner{})
+	sched.AddScanEngine(scanEngine, cfg.ScanInterval)
+	log.Printf("security scanner enabled: interval=%s", cfg.ScanInterval)
 
 	// Wire broadcast to SSE hub
 	sched.SetBroadcastFunc(func(target, check, status string, latencyMs int64) {

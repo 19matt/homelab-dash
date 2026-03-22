@@ -58,17 +58,24 @@ func NewServer(cfg config.ServerConfig, s *store.Store, hub *Hub, vmCollectors [
 		mux.HandleFunc("GET /api/proxmox/vms", handlers.ProxmoxVMsHandlerMulti(vmCollectors))
 	}
 
+	// Security API
+	mux.HandleFunc("GET /api/security/findings", handlers.FindingsHandler(s))
+	mux.HandleFunc("GET /api/security/summary", handlers.SummaryHandler(s))
+	mux.HandleFunc("GET /api/security/report", handlers.ReportHandler(s))
+
 	// Page handlers
 	mux.HandleFunc("GET /{$}", handlers.OverviewHandler(tmpl, s, vmCollectors))
 	mux.HandleFunc("GET /services", handlers.ServicesHandler(tmpl, s))
 	mux.HandleFunc("GET /proxmox", handlers.ProxmoxHandler(tmpl, s, vmCollectors))
 	mux.HandleFunc("GET /metrics", handlers.MetricsHandler(tmpl, s))
+	mux.HandleFunc("GET /security", handlers.SecurityHandler(tmpl, s))
 	mux.HandleFunc("GET /host/{target...}", handlers.HostHandler(tmpl, s))
 
 	// Htmx fragment handlers
 	mux.HandleFunc("GET /fragments/status-grid", handlers.StatusGridFragment(tmpl, s))
 	mux.HandleFunc("GET /fragments/proxmox-summary", handlers.ProxmoxSummaryFragment(tmpl, s, vmCollectors))
 	mux.HandleFunc("GET /fragments/vm-table", handlers.VMTableFragment(tmpl, vmCollectors))
+	mux.HandleFunc("GET /fragments/security-summary", handlers.SecuritySummaryFragment(tmpl, s))
 
 	// Wrap with auth if enabled
 	var handler http.Handler = mux
