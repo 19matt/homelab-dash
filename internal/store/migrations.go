@@ -89,4 +89,11 @@ CREATE INDEX IF NOT EXISTS idx_audit_type ON audit_events(type);
 CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_events(timestamp);
 `,
 	},
+	{
+		Version: "003",
+		SQL: `
+CREATE INDEX IF NOT EXISTS idx_data_points_target_metric_ts ON data_points(target, metric, timestamp);
+CREATE INDEX IF NOT EXISTS idx_check_results_target_check_ts ON check_results(target, check_name, timestamp);
+`,
+	},
 }
