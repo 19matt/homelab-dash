@@ -108,3 +108,72 @@ func (s *Store) GetRecentCheckResults(ctx context.Context, target string, limit 
 	}
 	return results, rows.Err()
 }
+
+// DailyUptime represents uptime percentage for a single day.
+type DailyUptime struct {
+	Date     string  `json:"date"`
+	Percent  float64 `json:"percent"`
+	DayIndex int     `json:"day_index,omitempty"`
+}
+
+// GetDailyUptime returns daily uptime percentages for a target over the given number of days.
+func (s *Store) GetDailyUptime(ctx context.Context, target, check string, days int) ([]DailyUptime, error) {
+	since := time.Now().AddDate(0, 0, -days)
+
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT
+			strftime('%Y-%m-%d', timestamp) AS day,
+			COUNT(*) AS total,
+			COALESCE(SUM(CASE WHEN status = 0 THEN 1 ELSE 0 END), 0) AS passed
+		 FROM check_results
+		 WHERE target = ? AND check_name = ? AND timestamp > ?
+		 GROUP BY day
+		 ORDER BY day`,
+		target, check, since)
+	if err != nil {
+		return nil, fmt.Errorf("store: get daily uptime: %w", err)
+	}
+	defer rows.Close()
+
+	var results []DailyUptime
+	for rows.Next() {
+		var d DailyUptime
+		var total, passed int
+		if err := rows.Scan(&d.Date, &total, &passed); err != nil {
+			return nil, fmt.Errorf("store: scan daily uptime: %w", err)
+		}
+		if total > 0 {
+			d.Percent = float64(passed) / float64(total) * 100
+		} else {
+			d.Percent = 100
+		}
+		results = append(results, d)
+	}
+	return results, rows.Err()
+}
+
+// GetFindingsForTarget returns security findings for a specific target.
+func (s *Store) GetFindingsForTarget(ctx context.Context, target string, limit int) ([]Finding, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, timestamp, target, scanner, title, description, severity, remediation
+		 FROM findings
+		 WHERE target = ?
+		 ORDER BY severity DESC
+		 LIMIT ?`,
+		target, limit)
+	if err != nil {
+		return nil, fmt.Errorf("store: get findings for target: %w", err)
+	}
+	defer rows.Close()
+
+	var findings []Finding
+	for rows.Next() {
+		var f Finding
+		if err := rows.Scan(&f.ID, &f.Timestamp, &f.Target, &f.Scanner,
+			&f.Title, &f.Description, &f.Severity, &f.Remediation); err != nil {
+			return nil, fmt.Errorf("store: scan finding: %w", err)
+		}
+		findings = append(findings, f)
+	}
+	return findings, rows.Err()
+}

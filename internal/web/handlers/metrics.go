@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/homelab/homelab-dash/internal/integration/proxmox"
@@ -65,19 +66,28 @@ func MetricsHistoryHandler(s *store.Store) http.HandlerFunc {
 			return
 		}
 
-		windowStr := r.URL.Query().Get("window")
-		if windowStr == "" {
-			windowStr = "1h"
-		}
+		var from, to time.Time
 
-		window, err := parseWindow(windowStr)
-		if err != nil {
-			http.Error(w, "invalid window: use 1h, 6h, 24h, or 7d", http.StatusBadRequest)
-			return
+		// Support custom from/to range
+		fromStr := r.URL.Query().Get("from")
+		toStr := r.URL.Query().Get("to")
+		if fromStr != "" && toStr != "" {
+			from, _ = time.Parse(time.RFC3339, fromStr)
+			to, _ = time.Parse(time.RFC3339, toStr)
+		} else {
+			// Fall back to window shorthand
+			windowStr := r.URL.Query().Get("window")
+			if windowStr == "" {
+				windowStr = "1h"
+			}
+			window, err := parseWindow(windowStr)
+			if err != nil {
+				http.Error(w, "invalid window: use 1h, 6h, 24h, or 7d", http.StatusBadRequest)
+				return
+			}
+			to = time.Now()
+			from = to.Add(-window)
 		}
-
-		to := time.Now()
-		from := to.Add(-window)
 
 		points, err := s.GetDataPoints(r.Context(), target, metric, from, to)
 		if err != nil {
@@ -163,5 +173,41 @@ func parseWindow(s string) (time.Duration, error) {
 		return 7 * 24 * time.Hour, nil
 	default:
 		return time.ParseDuration(s)
+	}
+}
+
+// DailyUptimeHandler returns daily uptime percentages as JSON.
+func DailyUptimeHandler(s *store.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		target := r.URL.Query().Get("target")
+		if target == "" {
+			http.Error(w, "missing target parameter", http.StatusBadRequest)
+			return
+		}
+
+		check := r.URL.Query().Get("check")
+		if check == "" {
+			check = "ping"
+		}
+
+		days := 90
+		if d := r.URL.Query().Get("days"); d != "" {
+			if parsed, err := strconv.Atoi(d); err == nil && parsed > 0 {
+				days = parsed
+			}
+		}
+
+		uptime, err := s.GetDailyUptime(r.Context(), target, check, days)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		if uptime == nil {
+			uptime = []store.DailyUptime{}
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(uptime)
 	}
 }

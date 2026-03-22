@@ -51,6 +51,7 @@ func NewServer(cfg config.ServerConfig, s *store.Store, hub *Hub, vmCollectors [
 	// JSON API (existing)
 	mux.HandleFunc("GET /api/status", handlers.StatusHandler(s))
 	mux.HandleFunc("GET /api/uptime", handlers.UptimeHandler(s))
+	mux.HandleFunc("GET /api/uptime/daily", handlers.DailyUptimeHandler(s))
 	mux.HandleFunc("GET /api/metrics/latest", handlers.MetricsLatestHandler(s))
 	mux.HandleFunc("GET /api/metrics/history", handlers.MetricsHistoryHandler(s))
 	mux.HandleFunc("GET /api/metrics/targets", handlers.MetricsTargetsHandler(s))
