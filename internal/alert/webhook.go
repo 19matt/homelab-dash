@@ -1,54 +1,59 @@
 package alert
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 )
 
-// webhookPayload is the JSON body sent to webhooks.
-type webhookPayload struct {
-	Rule      string `json:"rule"`
-	Target    string `json:"target"`
-	Message   string `json:"message"`
-	Severity  string `json:"severity"`
-	Timestamp string `json:"timestamp"`
-}
-
 // Fire dispatches an alert to the configured webhook URL.
-// It logs the result and never panics.
+// It formats the message for ntfy with title, priority, and tags headers.
 func Fire(ctx context.Context, rule Rule, target, message string) {
 	if rule.Webhook == "" {
 		log.Printf("alert: rule %q fired for %s but no webhook configured", rule.Name, target)
 		return
 	}
 
-	payload := webhookPayload{
-		Rule:      rule.Name,
-		Target:    target,
-		Message:   message,
-		Severity:  rule.Severity,
-		Timestamp: time.Now().UTC().Format(time.RFC3339),
+	now := time.Now().Local().Format("15:04")
+
+	// Format plain text message
+	title := "⚠️ " + rule.Name
+	if rule.Severity == "critical" {
+		title = "🚨 " + rule.Name
 	}
 
-	body, err := json.Marshal(payload)
-	if err != nil {
-		log.Printf("alert: marshal webhook payload: %v", err)
-		return
+	body := title + "\n" +
+		"Target: " + target + "\n" +
+		"Severity: " + rule.Severity + "\n" +
+		"Time: " + now + "\n\n" +
+		message
+
+	// Determine ntfy priority (1=min, 3=default, 5=max)
+	priority := "3"
+	tags := "warning"
+	if rule.Severity == "critical" {
+		priority = "urgent"
+		tags = "rotating_light,fire"
+	} else if rule.Severity == "info" {
+		priority = "low"
+		tags = "information_source"
 	}
 
 	reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, rule.Webhook, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, rule.Webhook, strings.NewReader(body))
 	if err != nil {
 		log.Printf("alert: create webhook request: %v", err)
 		return
 	}
-	req.Header.Set("Content-Type", "application/json")
+
+	// ntfy headers
+	req.Header.Set("Title", rule.Name)
+	req.Header.Set("Priority", priority)
+	req.Header.Set("Tags", tags)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
