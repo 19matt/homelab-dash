@@ -141,8 +141,11 @@ type HostData struct {
 	IsVM          bool
 	VMID          string
 	VMType        string
+	VMStatus      string
+	VMUptime      string
 	LatestMetrics map[string]float64
 	RecentChecks  []checker.CheckResult
+	Findings      []FindingRow
 }
 
 // SecurityData is the data for the security page.
@@ -379,19 +382,33 @@ func HostHandler(tmpl *template.Template, s *store.Store) http.HandlerFunc {
 		}
 
 		isVM := strings.HasPrefix(target, "vm:")
-		var vmID, vmType string
+		var vmID, vmType, vmStatus, vmUptime string
 		if isVM {
 			parts := strings.SplitN(target, ":", 3)
 			if len(parts) == 3 {
 				vmID = parts[1]
 			}
 			vmType = "qemu"
+
+			// Get VM status from recent checks
+			checks, _ := s.GetRecentCheckResults(r.Context(), target, 1)
+			if len(checks) > 0 {
+				if checks[0].Check == "proxmox.vm.status" {
+					if checks[0].Status == checker.StatusPass {
+						vmStatus = "running"
+					} else if checks[0].Status == checker.StatusFail {
+						vmStatus = "stopped"
+					} else {
+						vmStatus = "unknown"
+					}
+				}
+			}
 		}
 
 		metrics := make(map[string]float64)
 		metricNames := []string{
-			"node.cpu.percent", "node.mem.percent",
-			"vm.cpu.percent", "vm.mem.percent",
+			"node.cpu.percent", "node.mem.percent", "node.uptime",
+			"vm.cpu.percent", "vm.mem.percent", "vm.uptime",
 		}
 		for _, m := range metricNames {
 			dp, _ := s.GetLatestDataPoint(r.Context(), target, m)
@@ -400,22 +417,51 @@ func HostHandler(tmpl *template.Template, s *store.Store) http.HandlerFunc {
 			}
 		}
 
+		// Format uptime
+		if uptime, ok := metrics["node.uptime"]; ok && uptime > 0 {
+			vmUptime = formatUptime(int64(uptime))
+		} else if uptime, ok := metrics["vm.uptime"]; ok && uptime > 0 {
+			vmUptime = formatUptime(int64(uptime))
+		}
+
 		recentChecks, _ := s.GetRecentCheckResults(r.Context(), target, 20)
+
+		// Get findings for this target
+		storeFindings, _ := s.GetFindingsForTarget(r.Context(), target, 5)
+		var findings []FindingRow
+		for _, f := range storeFindings {
+			findings = append(findings, FindingRow{
+				ID:          f.ID,
+				Timestamp:   f.Timestamp,
+				Target:      f.Target,
+				Scanner:     f.Scanner,
+				Title:       f.Title,
+				Description: f.Description,
+				Severity:    f.Severity,
+				Remediation: f.Remediation,
+			})
+		}
 
 		contentData := struct {
 			Target        string
 			IsVM          bool
 			VMID          string
 			VMType        string
+			VMStatus      string
+			VMUptime      string
 			LatestMetrics map[string]float64
 			RecentChecks  []checker.CheckResult
+			Findings      []FindingRow
 		}{
 			Target:        target,
 			IsVM:          isVM,
 			VMID:          vmID,
 			VMType:        vmType,
+			VMStatus:      vmStatus,
+			VMUptime:      vmUptime,
 			LatestMetrics: metrics,
 			RecentChecks:  recentChecks,
+			Findings:      findings,
 		}
 
 		data := HostData{
@@ -427,8 +473,11 @@ func HostHandler(tmpl *template.Template, s *store.Store) http.HandlerFunc {
 			IsVM:          isVM,
 			VMID:          vmID,
 			VMType:        vmType,
+			VMStatus:      vmStatus,
+			VMUptime:      vmUptime,
 			LatestMetrics: metrics,
 			RecentChecks:  recentChecks,
+			Findings:      findings,
 		}
 
 		tmpl.ExecuteTemplate(w, "layout", data)

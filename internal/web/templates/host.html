@@ -1,10 +1,18 @@
 {{ define "host-content" }}
+{{ if .IsVM }}
+<div class="breadcrumb">
+    <a href="/">Overview</a> / <a href="/proxmox">Proxmox</a> / {{ .Target }}
+</div>
+{{ end }}
+
 <h1>{{ .Target }}</h1>
 
 {{ if .IsVM }}
-<div style="margin-bottom: 1rem;">
-    <span class="badge badge-pass">VMID: {{ .VMID }}</span>
+<div style="margin-bottom: 1rem; display: flex; gap: 0.5rem;">
+    <span class="badge badge-unknown">VMID: {{ .VMID }}</span>
     <span class="badge badge-unknown">{{ .VMType }}</span>
+    <span class="badge badge-{{ if eq .VMStatus "running" }}pass{{ else if eq .VMStatus "stopped" }}fail{{ else }}warn{{ end }}">{{ .VMStatus }}</span>
+    {{ if .VMUptime }}<span class="muted">Uptime: {{ .VMUptime }}</span>{{ end }}
 </div>
 {{ end }}
 
@@ -33,17 +41,61 @@
 </div>
 
 {{ if .LatestMetrics }}
-<h2>CPU History (1h)</h2>
-<div class="chart-container" style="height: 200px;">
-    <canvas id="chart-host-cpu"></canvas>
+<h2>Performance (1h)</h2>
+<div class="mini-chart-row">
+    <div class="chart-container mini-chart">
+        <div class="chart-title">CPU %</div>
+        <canvas id="host-chart-cpu"></canvas>
+    </div>
+    <div class="chart-container mini-chart">
+        <div class="chart-title">Memory %</div>
+        <canvas id="host-chart-mem"></canvas>
+    </div>
+    {{ if .IsVM }}
+    <div class="chart-container mini-chart">
+        <div class="chart-title">Net In</div>
+        <canvas id="host-chart-netin"></canvas>
+    </div>
+    <div class="chart-container mini-chart">
+        <div class="chart-title">Net Out</div>
+        <canvas id="host-chart-netout"></canvas>
+    </div>
+    {{ end }}
 </div>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     var target = '{{ .Target }}';
     var prefix = target.startsWith('node:') ? 'node.' : 'vm.';
-    updateChart('chart-host-cpu', target, prefix + 'cpu.percent', '1h');
+    updateChart('host-chart-cpu', target, prefix + 'cpu.percent', '1h');
+    updateChart('host-chart-mem', target, prefix + 'mem.percent', '1h');
+    {{ if .IsVM }}
+    updateChart('host-chart-netin', target, 'vm.netin', '1h');
+    updateChart('host-chart-netout', target, 'vm.netout', '1h');
+    {{ end }}
 });
 </script>
+{{ end }}
+
+{{ if .Findings }}
+<h2>Security Findings</h2>
+<table>
+    <thead>
+        <tr>
+            <th>Severity</th>
+            <th>Title</th>
+            <th>Scanner</th>
+        </tr>
+    </thead>
+    <tbody>
+        {{ range .Findings }}
+        <tr>
+            <td><span class="badge {{ severityBadge .Severity }}">{{ severityName .Severity }}</span></td>
+            <td>{{ .Title }}</td>
+            <td>{{ .Scanner }}</td>
+        </tr>
+        {{ end }}
+    </tbody>
+</table>
 {{ end }}
 
 <h2>Recent Checks</h2>
