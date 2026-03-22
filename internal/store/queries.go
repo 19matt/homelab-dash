@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -121,41 +122,59 @@ type DailyUptime struct {
 func (s *Store) GetDailyUptime(ctx context.Context, target, check string, days int) ([]DailyUptime, error) {
 	since := time.Now().AddDate(0, 0, -days)
 
+	// Get all check results for the target and compute daily uptime in Go
+	// (SQLite strftime doesn't work with modernc's time.Time storage)
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT
-			strftime('%Y-%m-%d', timestamp) AS day,
-			COUNT(*) AS total,
-			SUM(CASE WHEN status = 0 THEN 1 ELSE 0 END) AS passed
+		`SELECT timestamp, status
 		 FROM check_results
 		 WHERE target = ? AND check_name = ? AND timestamp > ?
-		 GROUP BY day
-		 ORDER BY day`,
+		 ORDER BY timestamp`,
 		target, check, since)
 	if err != nil {
 		return nil, fmt.Errorf("store: get daily uptime: %w", err)
 	}
 	defer rows.Close()
 
-	var results []DailyUptime
+	// Group by day in Go
+	type dayStats struct {
+		total  int
+		passed int
+	}
+	dayMap := make(map[string]*dayStats)
+
 	for rows.Next() {
-		var d DailyUptime
-		var total, passed int
-		var dayPtr *string
-		if err := rows.Scan(&dayPtr, &total, &passed); err != nil {
+		var ts time.Time
+		var status int
+		if err := rows.Scan(&ts, &status); err != nil {
 			return nil, fmt.Errorf("store: scan daily uptime: %w", err)
 		}
-		if dayPtr != nil {
-			d.Date = *dayPtr
-		} else {
-			continue
+		day := ts.Format("2006-01-02")
+		if dayMap[day] == nil {
+			dayMap[day] = &dayStats{}
 		}
-		if total > 0 {
-			d.Percent = float64(passed) / float64(total) * 100
-		} else {
-			d.Percent = 100
+		dayMap[day].total++
+		if status == 0 {
+			dayMap[day].passed++
 		}
-		results = append(results, d)
 	}
+
+	// Convert to sorted slice
+	var dates []string
+	for d := range dayMap {
+		dates = append(dates, d)
+	}
+	sort.Strings(dates)
+
+	var results []DailyUptime
+	for _, d := range dates {
+		stats := dayMap[d]
+		pct := 100.0
+		if stats.total > 0 {
+			pct = float64(stats.passed) / float64(stats.total) * 100
+		}
+		results = append(results, DailyUptime{Date: d, Percent: pct})
+	}
+
 	return results, rows.Err()
 }
 
