@@ -22,9 +22,11 @@ targets:
 integrations:
   proxmox:
     enabled: false
-    host: ""
-    token_id: ""
-    token_secret: ""
+    host: "https://192.168.1.20:8006"
+    token_id: "homelab-dash@pam!monitoring"
+    token_secret: "YOUR-TOKEN-SECRET-HERE"
+    insecure_tls: true
+    node: "pve"
   jellyfin:
     enabled: false
     host: ""
