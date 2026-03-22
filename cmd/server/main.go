@@ -61,10 +61,10 @@ func main() {
 	mux.HandleFunc("GET /api/status", handlers.StatusHandler(s))
 	mux.HandleFunc("GET /api/uptime", handlers.UptimeHandler(s))
 
-	// Wrap API routes with auth if enabled
+	// Wrap with auth if enabled (health stays public)
 	var handler http.Handler = mux
 	if cfg.Server.Auth.Enabled {
-		handler = web.BasicAuth(cfg.Server.Auth.Username, cfg.Server.Auth.Password, mux)
+		handler = web.BasicAuth(cfg.Server.Auth.Username, cfg.Server.Auth.Password, mux, "/health")
 	}
 
 	// Set up graceful shutdown

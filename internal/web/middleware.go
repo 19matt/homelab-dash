@@ -3,11 +3,20 @@ package web
 import (
 	"crypto/subtle"
 	"net/http"
+	"strings"
 )
 
 // BasicAuth wraps an HTTP handler with HTTP Basic Authentication.
-func BasicAuth(username, password string, next http.Handler) http.Handler {
+// Paths matching publicPrefixes skip authentication.
+func BasicAuth(username, password string, next http.Handler, publicPrefixes ...string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		for _, prefix := range publicPrefixes {
+			if strings.HasPrefix(r.URL.Path, prefix) {
+				next.ServeHTTP(w, r)
+				return
+			}
+		}
+
 		u, p, ok := r.BasicAuth()
 		if !ok ||
 			subtle.ConstantTimeCompare([]byte(u), []byte(username)) != 1 ||

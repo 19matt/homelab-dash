@@ -39,20 +39,28 @@ func (sc *Scheduler) AddCollector(c collector.Collector) {
 // Run starts goroutines for each registered checker and collector.
 // It blocks until ctx is cancelled.
 func (sc *Scheduler) Run(ctx context.Context) {
-	for _, c := range sc.checkers {
-		go sc.runChecker(ctx, c)
+	for i, c := range sc.checkers {
+		go sc.runChecker(ctx, c, time.Duration(i)*100*time.Millisecond)
 	}
-	for _, c := range sc.collectors {
-		go sc.runCollector(ctx, c)
+	for i, c := range sc.collectors {
+		go sc.runCollector(ctx, c, time.Duration(i)*100*time.Millisecond)
 	}
 	<-ctx.Done()
 }
 
-func (sc *Scheduler) runChecker(ctx context.Context, c checker.Checker) {
+func (sc *Scheduler) runChecker(ctx context.Context, c checker.Checker, delay time.Duration) {
+	// Stagger initial runs to avoid concurrent DB writes
+	if delay > 0 {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(delay):
+		}
+	}
+
 	ticker := time.NewTicker(sc.interval)
 	defer ticker.Stop()
 
-	// Run immediately on start
 	sc.executeChecker(ctx, c)
 
 	for {
@@ -80,7 +88,15 @@ func (sc *Scheduler) executeChecker(ctx context.Context, c checker.Checker) {
 	log.Printf("checker %s: %s/%s = %s (%s)", c.Name(), result.Target, result.Check, result.Status, result.Latency)
 }
 
-func (sc *Scheduler) runCollector(ctx context.Context, c collector.Collector) {
+func (sc *Scheduler) runCollector(ctx context.Context, c collector.Collector, delay time.Duration) {
+	if delay > 0 {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(delay):
+		}
+	}
+
 	ticker := time.NewTicker(sc.interval)
 	defer ticker.Stop()
 

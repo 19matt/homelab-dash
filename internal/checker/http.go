@@ -5,6 +5,8 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net/http"
+	"net/url"
+	"strconv"
 	"time"
 )
 
@@ -12,16 +14,17 @@ import (
 type HTTPChecker struct {
 	target   string
 	url      string
+	port     int
 	expected int
 	timeout  time.Duration
 }
 
 // NewHTTPChecker creates an HTTPChecker for the given target and scheme/port.
 func NewHTTPChecker(target, host string, port int, scheme string) *HTTPChecker {
-	url := fmt.Sprintf("%s://%s:%d", scheme, host, port)
 	return &HTTPChecker{
 		target:   target,
-		url:      url,
+		url:      fmt.Sprintf("%s://%s:%d", scheme, host, port),
+		port:     port,
 		expected: 200,
 		timeout:  10 * time.Second,
 	}
@@ -29,22 +32,7 @@ func NewHTTPChecker(target, host string, port int, scheme string) *HTTPChecker {
 
 // Name returns the check name including the port.
 func (h *HTTPChecker) Name() string {
-	return fmt.Sprintf("http:%d", h.port())
-}
-
-func (h *HTTPChecker) port() int {
-	// Extract port from URL for naming
-	var scheme, host string
-	var port int
-	fmt.Sscanf(h.url, "%[^:]://%[^:]:%d", &scheme, &host, &port)
-	if port == 0 {
-		if scheme == "https" {
-			port = 443
-		} else {
-			port = 80
-		}
-	}
-	return port
+	return fmt.Sprintf("http:%d", h.port)
 }
 
 // Check performs an HTTP request and evaluates the response.
@@ -101,4 +89,16 @@ func (h *HTTPChecker) Check(ctx context.Context) (CheckResult, error) {
 	}
 
 	return result, nil
+}
+
+// ExtractPort extracts the port from a URL string, returning defaultPort if not found.
+func ExtractPort(rawURL string, defaultPort int) int {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return defaultPort
+	}
+	if p, err := strconv.Atoi(u.Port()); err == nil {
+		return p
+	}
+	return defaultPort
 }
