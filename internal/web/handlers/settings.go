@@ -30,10 +30,15 @@ func SettingsHandler(tmpl *template.Template, cfg *config.Config) http.HandlerFu
 			Targets: cfg.Targets,
 		}
 
+		content, ok := renderOrError(w, tmpl, "settings-content", contentData)
+		if !ok {
+			return
+		}
+
 		data := SettingsData{
 			PageData: PageData{
 				ActivePage: "settings",
-				Content:    renderTemplate(tmpl, "settings-content", contentData),
+				Content:    content,
 			},
 			Config:  cfg,
 			Targets: cfg.Targets,

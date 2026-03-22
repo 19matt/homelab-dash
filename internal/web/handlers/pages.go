@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"html/template"
+	"log"
 	"net/http"
 	"sort"
 	"strings"
@@ -69,10 +70,38 @@ var TemplateFuncMap = template.FuncMap{
 }
 
 // renderTemplate executes a named template and returns the HTML.
-func renderTemplate(tmpl *template.Template, name string, data interface{}) template.HTML {
+func renderTemplate(tmpl *template.Template, name string, data interface{}) (template.HTML, error) {
 	var buf bytes.Buffer
-	tmpl.ExecuteTemplate(&buf, name, data)
-	return template.HTML(buf.String())
+	if err := tmpl.ExecuteTemplate(&buf, name, data); err != nil {
+		return "", fmt.Errorf("render template %s: %w", name, err)
+	}
+	return template.HTML(buf.String()), nil
+}
+
+// respondError renders an error page and logs the error.
+func respondError(w http.ResponseWriter, tmpl *template.Template, err error, msg string) {
+	log.Printf("handler error: %s: %v", msg, err)
+	w.WriteHeader(http.StatusInternalServerError)
+	content := fmt.Sprintf(`<div class="card" style="text-align:center;padding:3rem;">
+		<h2>Error</h2>
+		<p class="muted">%s</p>
+		<p class="muted" style="font-size:0.8rem;margin-top:1rem;">%v</p>
+	</div>`, msg, err)
+	data := PageData{
+		ActivePage: "",
+		Content:    template.HTML(content),
+	}
+	tmpl.ExecuteTemplate(w, "layout", data)
+}
+
+// renderOrError renders a template or returns false if rendering fails.
+func renderOrError(w http.ResponseWriter, tmpl *template.Template, name string, data interface{}) (template.HTML, bool) {
+	content, err := renderTemplate(tmpl, name, data)
+	if err != nil {
+		respondError(w, tmpl, err, "Failed to render page")
+		return "", false
+	}
+	return content, true
 }
 
 // PageData is the base data passed to all page templates.
@@ -257,10 +286,15 @@ func OverviewHandler(tmpl *template.Template, s *store.Store, vmCollectors []*pr
 			FrigateEnabled:  frigateClient != nil,
 		}
 
+		content, ok := renderOrError(w, tmpl, "overview-content", contentData)
+		if !ok {
+			return
+		}
+
 		data := OverviewData{
 			PageData: PageData{
 				ActivePage: "overview",
-				Content:    renderTemplate(tmpl, "overview-content", contentData),
+				Content:    content,
 			},
 			NodesRunning:    contentData.NodesRunning,
 			VMsRunning:      contentData.VMsRunning,
@@ -311,10 +345,15 @@ func ServicesHandler(tmpl *template.Template, s *store.Store) http.HandlerFunc {
 
 		contentData := struct{ Rows []ServiceRow }{Rows: rows}
 
+		content, ok := renderOrError(w, tmpl, "services-content", contentData)
+		if !ok {
+			return
+		}
+
 		data := ServicesData{
 			PageData: PageData{
 				ActivePage: "services",
-				Content:    renderTemplate(tmpl, "services-content", contentData),
+				Content:    content,
 			},
 			Rows: rows,
 		}
@@ -349,10 +388,15 @@ func ProxmoxHandler(tmpl *template.Template, s *store.Store, vmCollectors []*pro
 			VMUptimeBars map[string][]store.DailyUptime
 		}{Nodes: nodes, VMs: allVMs, VMUptimeBars: vmUptimeBars}
 
+		content, ok := renderOrError(w, tmpl, "proxmox-content", contentData)
+		if !ok {
+			return
+		}
+
 		data := ProxmoxData{
 			PageData: PageData{
 				ActivePage: "proxmox",
-				Content:    renderTemplate(tmpl, "proxmox-content", contentData),
+				Content:    content,
 			},
 			Nodes:        nodes,
 			VMs:          allVMs,
@@ -387,10 +431,15 @@ func MetricsHandler(tmpl *template.Template, s *store.Store) http.HandlerFunc {
 
 		contentData := struct{ Targets []string }{Targets: targets}
 
+		content, ok := renderOrError(w, tmpl, "metrics-content", contentData)
+		if !ok {
+			return
+		}
+
 		data := MetricsData{
 			PageData: PageData{
 				ActivePage: "metrics",
-				Content:    renderTemplate(tmpl, "metrics-content", contentData),
+				Content:    content,
 			},
 			Targets: targets,
 		}
@@ -491,10 +540,15 @@ func HostHandler(tmpl *template.Template, s *store.Store) http.HandlerFunc {
 			Findings:      findings,
 		}
 
+		content, ok := renderOrError(w, tmpl, "host-content", contentData)
+		if !ok {
+			return
+		}
+
 		data := HostData{
 			PageData: PageData{
 				ActivePage: "",
-				Content:    renderTemplate(tmpl, "host-content", contentData),
+				Content:    content,
 			},
 			Target:        target,
 			IsVM:          isVM,
@@ -623,10 +677,15 @@ func SecurityHandler(tmpl *template.Template, s *store.Store) http.HandlerFunc {
 			Scanners: scanners,
 		}
 
+		content, ok := renderOrError(w, tmpl, "security-content", contentData)
+		if !ok {
+			return
+		}
+
 		data := SecurityData{
 			PageData: PageData{
 				ActivePage: "security",
-				Content:    renderTemplate(tmpl, "security-content", contentData),
+				Content:    content,
 			},
 			Findings: rows,
 			Summary:  summary,
@@ -674,10 +733,15 @@ func AlertsHandler(tmpl *template.Template, s *store.Store) http.HandlerFunc {
 			Events []AlertEventRow
 		}{Events: rows}
 
+		content, ok := renderOrError(w, tmpl, "alerts-content", contentData)
+		if !ok {
+			return
+		}
+
 		data := AlertsData{
 			PageData: PageData{
 				ActivePage: "alerts",
-				Content:    renderTemplate(tmpl, "alerts-content", contentData),
+				Content:    content,
 			},
 			Events: rows,
 		}
@@ -713,6 +777,11 @@ func JellyfinHandler(tmpl *template.Template, client *jellyfin.Client) http.Hand
 			Counts:   counts,
 		}
 
+		content, ok := renderOrError(w, tmpl, "jellyfin-content", contentData)
+		if !ok {
+			return
+		}
+
 		data := struct {
 			PageData
 			Info     jellyfin.SystemInfo
@@ -721,7 +790,7 @@ func JellyfinHandler(tmpl *template.Template, client *jellyfin.Client) http.Hand
 		}{
 			PageData: PageData{
 				ActivePage: "jellyfin",
-				Content:    renderTemplate(tmpl, "jellyfin-content", contentData),
+				Content:    content,
 			},
 			Info:     info,
 			Sessions: activeSessions,
@@ -748,6 +817,11 @@ func FrigateHandler(tmpl *template.Template, client *frigate.Client) http.Handle
 			Stats:   stats,
 		}
 
+		content, ok := renderOrError(w, tmpl, "frigate-content", contentData)
+		if !ok {
+			return
+		}
+
 		data := struct {
 			PageData
 			Version string
@@ -755,7 +829,7 @@ func FrigateHandler(tmpl *template.Template, client *frigate.Client) http.Handle
 		}{
 			PageData: PageData{
 				ActivePage: "frigate",
-				Content:    renderTemplate(tmpl, "frigate-content", contentData),
+				Content:    content,
 			},
 			Version: version,
 			Stats:   stats,

@@ -77,10 +77,15 @@ func AuditHandler(tmpl *template.Template, s *store.Store) http.HandlerFunc {
 			TotalCount: totalCount,
 		}
 
+		content, ok := renderOrError(w, tmpl, "audit-content", contentData)
+		if !ok {
+			return
+		}
+
 		data := AuditData{
 			PageData: PageData{
 				ActivePage: "audit",
-				Content:    renderTemplate(tmpl, "audit-content", contentData),
+				Content:    content,
 			},
 			Events:     events,
 			EventType:  eventType,
