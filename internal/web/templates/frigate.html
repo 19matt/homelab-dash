@@ -1,0 +1,76 @@
+{{ define "frigate-content" }}
+<h1>Frigate</h1>
+
+<div class="stat-row">
+    <div class="stat-card">
+        <div class="stat-value mono">v{{ .Version }}</div>
+        <div class="stat-label">Version</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ len .Stats.Cameras }}</div>
+        <div class="stat-label">Cameras</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value mono">{{ formatUptime (toInt .Stats.Service.Uptime) }}</div>
+        <div class="stat-label">Uptime</div>
+    </div>
+</div>
+
+<h2>Cameras</h2>
+{{ if .Stats.Cameras }}
+<table>
+    <thead>
+        <tr>
+            <th>Camera</th>
+            <th>FPS</th>
+            <th>Detection FPS</th>
+            <th>Process FPS</th>
+            <th>Skipped FPS</th>
+            <th>Status</th>
+        </tr>
+    </thead>
+    <tbody>
+        {{ range $name, $cam := .Stats.Cameras }}
+        <tr>
+            <td>{{ $name }}</td>
+            <td class="mono">{{ printf "%.1f" $cam.CameraFPS }}</td>
+            <td class="mono">{{ printf "%.1f" $cam.DetectionFPS }}</td>
+            <td class="mono">{{ printf "%.1f" $cam.ProcessFPS }}</td>
+            <td class="mono {{ if gt $cam.SkippedFPS 0.0 }}text-warn{{ end }}">{{ printf "%.1f" $cam.SkippedFPS }}</td>
+            <td>
+                {{ if $cam.DetectionEnabled }}
+                <span class="badge badge-pass">detecting</span>
+                {{ else }}
+                <span class="badge badge-unknown">disabled</span>
+                {{ end }}
+            </td>
+        </tr>
+        {{ end }}
+    </tbody>
+</table>
+{{ else }}
+<div class="card" style="text-align:center;padding:2rem;">
+    <p class="muted">No cameras configured</p>
+</div>
+{{ end }}
+
+{{ if .Stats.Detectors }}
+<h2>Detectors</h2>
+<table>
+    <thead>
+        <tr>
+            <th>Detector</th>
+            <th>Inference Speed</th>
+        </tr>
+    </thead>
+    <tbody>
+        {{ range $name, $det := .Stats.Detectors }}
+        <tr>
+            <td>{{ $name }}</td>
+            <td class="mono">{{ printf "%.1f" $det.InferenceSpeed }}ms</td>
+        </tr>
+        {{ end }}
+    </tbody>
+</table>
+{{ end }}
+{{ end }}

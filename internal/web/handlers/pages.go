@@ -60,6 +60,10 @@ var TemplateFuncMap = template.FuncMap{
 		}
 		return "#22c55e"
 	},
+	"formatUptime": func(seconds int) string {
+		return formatUptime(int64(seconds))
+	},
+	"toInt": func(v int) int { return v },
 }
 
 // renderTemplate executes a named template and returns the HTML.

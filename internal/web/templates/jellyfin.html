@@ -1,0 +1,76 @@
+{{ define "jellyfin-content" }}
+<h1>Jellyfin</h1>
+
+<div class="stat-row">
+    <div class="stat-card">
+        <div class="stat-value">{{ .Info.ServerName }}</div>
+        <div class="stat-label">Server</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value mono">v{{ .Info.Version }}</div>
+        <div class="stat-label">Version</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ len .Sessions }}</div>
+        <div class="stat-label">Now Streaming</div>
+    </div>
+</div>
+
+<h2>Library</h2>
+<div class="stat-row">
+    <div class="stat-card">
+        <div class="stat-value mono">{{ .Counts.MovieCount }}</div>
+        <div class="stat-label">Movies</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value mono">{{ .Counts.SeriesCount }}</div>
+        <div class="stat-label">Series</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value mono">{{ .Counts.EpisodeCount }}</div>
+        <div class="stat-label">Episodes</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value mono">{{ .Counts.SongCount }}</div>
+        <div class="stat-label">Songs</div>
+    </div>
+</div>
+
+{{ if .Sessions }}
+<h2>Active Sessions</h2>
+<table>
+    <thead>
+        <tr>
+            <th>User</th>
+            <th>Device</th>
+            <th>Client</th>
+            <th>Now Playing</th>
+            <th>Status</th>
+        </tr>
+    </thead>
+    <tbody>
+        {{ range .Sessions }}
+        <tr>
+            <td>{{ .UserName }}</td>
+            <td>{{ .DeviceName }}</td>
+            <td>{{ .Client }}</td>
+            <td>{{ if .NowPlayingItem }}{{ .NowPlayingItem.Name }}{{ else }}-{{ end }}</td>
+            <td>
+                {{ if .TranscodingInfo }}
+                <span class="badge badge-warn">transcoding</span>
+                {{ else if .PlayState.IsPaused }}
+                <span class="badge badge-unknown">paused</span>
+                {{ else }}
+                <span class="badge badge-pass">playing</span>
+                {{ end }}
+            </td>
+        </tr>
+        {{ end }}
+    </tbody>
+</table>
+{{ else }}
+<div class="card" style="text-align:center;padding:2rem;">
+    <p class="muted">No active sessions</p>
+</div>
+{{ end }}
+{{ end }}

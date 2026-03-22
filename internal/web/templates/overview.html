@@ -56,6 +56,22 @@
     {{ template "fragment-status-grid" . }}
 </div>
 
+{{ if .JellyfinEnabled }}
+<h2>Jellyfin</h2>
+<div id="jellyfin-widget"
+     hx-get="/fragments/jellyfin-summary" hx-trigger="every 60s" hx-swap="innerHTML">
+    <p class="muted">Loading...</p>
+</div>
+{{ end }}
+
+{{ if .FrigateEnabled }}
+<h2>Frigate</h2>
+<div id="frigate-widget"
+     hx-get="/fragments/frigate-summary" hx-trigger="every 30s" hx-swap="innerHTML">
+    <p class="muted">Loading...</p>
+</div>
+{{ end }}
+
 {{ if .VMs }}
 <h2>Running VMs</h2>
 <div class="card-grid">
