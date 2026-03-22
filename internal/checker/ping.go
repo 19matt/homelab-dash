@@ -32,7 +32,7 @@ func (p *PingChecker) Name() string {
 
 // Check performs a TCP dial to verify connectivity.
 func (p *PingChecker) Check(ctx context.Context) (CheckResult, error) {
-	addr := fmt.Sprintf("%s:%d", p.host, p.port)
+	addr := net.JoinHostPort(p.host, fmt.Sprintf("%d", p.port))
 
 	start := time.Now()
 	conn, err := net.DialTimeout("tcp", addr, p.timeout)
