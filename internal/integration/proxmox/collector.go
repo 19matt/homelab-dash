@@ -42,15 +42,19 @@ func (c *NodeCollector) Collect(ctx context.Context) ([]collector.DataPoint, err
 		memPercent = float64(status.Memory.Used) / float64(status.Memory.Total) * 100
 	}
 
+	load1, _ := strconv.ParseFloat(status.LoadAvg[0], 64)
+	load5, _ := strconv.ParseFloat(status.LoadAvg[1], 64)
+	load15, _ := strconv.ParseFloat(status.LoadAvg[2], 64)
+
 	points := []collector.DataPoint{
 		{Timestamp: now, Target: target, Metric: "node.cpu.percent", Value: status.CPU * 100},
 		{Timestamp: now, Target: target, Metric: "node.mem.used", Value: float64(status.Memory.Used)},
 		{Timestamp: now, Target: target, Metric: "node.mem.total", Value: float64(status.Memory.Total)},
 		{Timestamp: now, Target: target, Metric: "node.mem.percent", Value: memPercent},
 		{Timestamp: now, Target: target, Metric: "node.uptime", Value: float64(status.Uptime)},
-		{Timestamp: now, Target: target, Metric: "node.load1", Value: status.LoadAvg[0]},
-		{Timestamp: now, Target: target, Metric: "node.load5", Value: status.LoadAvg[1]},
-		{Timestamp: now, Target: target, Metric: "node.load15", Value: status.LoadAvg[2]},
+		{Timestamp: now, Target: target, Metric: "node.load1", Value: load1},
+		{Timestamp: now, Target: target, Metric: "node.load5", Value: load5},
+		{Timestamp: now, Target: target, Metric: "node.load15", Value: load15},
 	}
 
 	log.Printf("collector %s: collected %d points for %s", c.Name(), len(points), target)

@@ -7,7 +7,7 @@ type NodeStatus struct {
 	CPU     float64    `json:"cpu"`
 	Memory  MemoryInfo `json:"memory"`
 	Uptime  int64      `json:"uptime"`
-	LoadAvg [3]float64 `json:"loadavg"`
+	LoadAvg [3]string  `json:"loadavg"` // Proxmox returns loadavg as strings
 }
 
 // MemoryInfo holds memory statistics.
