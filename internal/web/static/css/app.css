@@ -515,3 +515,20 @@ select {
     color: var(--text);
     border-bottom-color: var(--primary);
 }
+
+/* Alert severity badges */
+.alert-severity-critical {
+    background: rgba(239, 68, 68, 0.25);
+    color: #ff6b6b;
+    font-weight: 700;
+}
+
+.alert-severity-warn {
+    background: rgba(245, 158, 11, 0.15);
+    color: var(--warn);
+}
+
+.alert-severity-info {
+    background: rgba(59, 130, 246, 0.15);
+    color: var(--primary);
+}

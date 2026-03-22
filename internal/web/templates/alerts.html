@@ -1,0 +1,65 @@
+{{ define "alerts-content" }}
+<h1>Alerts</h1>
+
+<div class="filter-bar">
+    <div class="filter-group">
+        <label class="filter-label">Severity</label>
+        <select id="alert-filter-severity" onchange="filterAlerts()">
+            <option value="">All severities</option>
+            <option value="critical">Critical</option>
+            <option value="warn">Warn</option>
+            <option value="info">Info</option>
+        </select>
+    </div>
+    <div class="filter-group">
+        <span class="muted" id="alert-filter-count">Showing {{ len .Events }} events</span>
+        <button class="btn-small" onclick="document.getElementById('alert-filter-severity').value=''; filterAlerts();">Clear</button>
+    </div>
+</div>
+
+{{ if .Events }}
+<table id="alerts-table">
+    <thead>
+        <tr>
+            <th>When</th>
+            <th>Rule</th>
+            <th>Target</th>
+            <th>Message</th>
+            <th>Severity</th>
+        </tr>
+    </thead>
+    <tbody>
+        {{ range .Events }}
+        <tr class="alert-row" data-severity="{{ .Severity }}">
+            <td class="mono">{{ .Timestamp.Format "Jan 02 15:04" }}</td>
+            <td>{{ .RuleName }}</td>
+            <td>{{ .Target }}</td>
+            <td>{{ .Message }}</td>
+            <td><span class="badge alert-severity-{{ .Severity }}">{{ .Severity }}</span></td>
+        </tr>
+        {{ end }}
+    </tbody>
+</table>
+{{ else }}
+<div class="card" style="text-align:center;padding:3rem;">
+    <p class="muted">No alerts yet</p>
+    <p class="muted" style="margin-top:0.5rem;">Alerts will appear here when rules fire</p>
+</div>
+{{ end }}
+
+<script>
+function filterAlerts() {
+    var severity = document.getElementById('alert-filter-severity').value;
+    var rows = document.querySelectorAll('#alerts-table tbody tr.alert-row');
+    var count = 0;
+
+    rows.forEach(function(row) {
+        var show = !severity || row.dataset.severity === severity;
+        row.style.display = show ? '' : 'none';
+        if (show) count++;
+    });
+
+    document.getElementById('alert-filter-count').textContent = 'Showing ' + count + ' events';
+}
+</script>
+{{ end }}

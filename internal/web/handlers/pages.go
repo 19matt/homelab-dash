@@ -126,6 +126,22 @@ type SecurityData struct {
 	Scanners []string
 }
 
+// AlertsData is the data for the alerts page.
+type AlertsData struct {
+	PageData
+	Events []AlertEventRow
+}
+
+// AlertEventRow is a row in the alerts table.
+type AlertEventRow struct {
+	ID        int64
+	Timestamp time.Time
+	RuleName  string
+	Target    string
+	Message   string
+	Severity  string
+}
+
 // FindingRow is a row in the findings table.
 type FindingRow struct {
 	ID          int64
@@ -515,5 +531,39 @@ func SecuritySummaryFragment(tmpl *template.Template, s *store.Store) http.Handl
 
 		w.Header().Set("Content-Type", "text/html")
 		tmpl.ExecuteTemplate(w, "fragment-security-summary", data)
+	}
+}
+
+// AlertsHandler renders the alerts page.
+func AlertsHandler(tmpl *template.Template, s *store.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		since := time.Now().Add(-7 * 24 * time.Hour)
+		events, _ := s.GetAlertEvents(r.Context(), since, 100)
+
+		var rows []AlertEventRow
+		for _, e := range events {
+			rows = append(rows, AlertEventRow{
+				ID:        e.ID,
+				Timestamp: e.Timestamp,
+				RuleName:  e.RuleName,
+				Target:    e.Target,
+				Message:   e.Message,
+				Severity:  e.Severity,
+			})
+		}
+
+		contentData := struct {
+			Events []AlertEventRow
+		}{Events: rows}
+
+		data := AlertsData{
+			PageData: PageData{
+				ActivePage: "alerts",
+				Content:    renderTemplate(tmpl, "alerts-content", contentData),
+			},
+			Events: rows,
+		}
+
+		tmpl.ExecuteTemplate(w, "layout", data)
 	}
 }
