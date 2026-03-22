@@ -72,6 +72,8 @@ type ProxmoxConfig struct {
 	Host        string `yaml:"host"`
 	TokenID     string `yaml:"token_id"`
 	TokenSecret string `yaml:"token_secret"`
+	InsecureTLS bool   `yaml:"insecure_tls"`
+	Node        string `yaml:"node"`
 }
 
 // JellyfinConfig holds Jellyfin API connection settings.
@@ -166,8 +168,19 @@ func (c *Config) Validate() error {
 		c.Targets[i].Endpoint = endpoints
 	}
 
-	if c.Integrations.Proxmox.Enabled && c.Integrations.Proxmox.Host == "" {
-		return fmt.Errorf("integrations.proxmox.host is required when enabled")
+	if c.Integrations.Proxmox.Enabled {
+		if c.Integrations.Proxmox.Host == "" {
+			return fmt.Errorf("integrations.proxmox.host is required when enabled")
+		}
+		if c.Integrations.Proxmox.Node == "" {
+			return fmt.Errorf("integrations.proxmox.node is required when enabled")
+		}
+		if c.Integrations.Proxmox.TokenID == "" {
+			return fmt.Errorf("integrations.proxmox.token_id is required when enabled")
+		}
+		if c.Integrations.Proxmox.TokenSecret == "" {
+			return fmt.Errorf("integrations.proxmox.token_secret is required when enabled")
+		}
 	}
 	if c.Integrations.Jellyfin.Enabled && c.Integrations.Jellyfin.Host == "" {
 		return fmt.Errorf("integrations.jellyfin.host is required when enabled")
