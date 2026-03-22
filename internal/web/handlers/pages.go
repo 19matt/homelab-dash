@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"html/template"
@@ -26,9 +27,17 @@ var TemplateFuncMap = template.FuncMap{
 	"tof": func(v uint64) float64 { return float64(v) },
 }
 
+// renderTemplate executes a named template and returns the HTML.
+func renderTemplate(tmpl *template.Template, name string, data interface{}) template.HTML {
+	var buf bytes.Buffer
+	tmpl.ExecuteTemplate(&buf, name, data)
+	return template.HTML(buf.String())
+}
+
 // PageData is the base data passed to all page templates.
 type PageData struct {
 	ActivePage string
+	Content    template.HTML
 }
 
 // OverviewData is the data for the overview page.
@@ -106,7 +115,6 @@ func OverviewHandler(tmpl *template.Template, s *store.Store, vmCollectors []*pr
 			}
 		}
 
-		// Get VMs from collectors
 		var allVMs []proxmox.VMSummary
 		for _, c := range vmCollectors {
 			allVMs = append(allVMs, c.LatestVMs()...)
@@ -121,11 +129,18 @@ func OverviewHandler(tmpl *template.Template, s *store.Store, vmCollectors []*pr
 			}
 		}
 
-		// Get node stats from latest data points
 		nodes := getNodeStats(s)
 
-		data := OverviewData{
-			PageData:      PageData{ActivePage: "overview"},
+		contentData := struct {
+			NodesRunning  int
+			VMsRunning    int
+			VMsStopped    int
+			ServicesUp    int
+			ServicesTotal int
+			StatusResults []checker.CheckResult
+			VMs           []proxmox.VMSummary
+			Nodes         []NodeStat
+		}{
 			NodesRunning:  len(nodes),
 			VMsRunning:    running,
 			VMsStopped:    stopped,
@@ -134,6 +149,21 @@ func OverviewHandler(tmpl *template.Template, s *store.Store, vmCollectors []*pr
 			StatusResults: results,
 			VMs:           allVMs,
 			Nodes:         nodes,
+		}
+
+		data := OverviewData{
+			PageData: PageData{
+				ActivePage: "overview",
+				Content:    renderTemplate(tmpl, "overview-content", contentData),
+			},
+			NodesRunning:  contentData.NodesRunning,
+			VMsRunning:    contentData.VMsRunning,
+			VMsStopped:    contentData.VMsStopped,
+			ServicesUp:    contentData.ServicesUp,
+			ServicesTotal: contentData.ServicesTotal,
+			StatusResults: contentData.StatusResults,
+			VMs:           contentData.VMs,
+			Nodes:         contentData.Nodes,
 		}
 
 		tmpl.ExecuteTemplate(w, "layout", data)
@@ -168,9 +198,14 @@ func ServicesHandler(tmpl *template.Template, s *store.Store) http.HandlerFunc {
 			})
 		}
 
+		contentData := struct{ Rows []ServiceRow }{Rows: rows}
+
 		data := ServicesData{
-			PageData: PageData{ActivePage: "services"},
-			Rows:     rows,
+			PageData: PageData{
+				ActivePage: "services",
+				Content:    renderTemplate(tmpl, "services-content", contentData),
+			},
+			Rows: rows,
 		}
 
 		tmpl.ExecuteTemplate(w, "layout", data)
@@ -187,10 +222,18 @@ func ProxmoxHandler(tmpl *template.Template, s *store.Store, vmCollectors []*pro
 
 		nodes := getNodeStats(s)
 
+		contentData := struct {
+			Nodes []NodeStat
+			VMs   []proxmox.VMSummary
+		}{Nodes: nodes, VMs: allVMs}
+
 		data := ProxmoxData{
-			PageData: PageData{ActivePage: "proxmox"},
-			Nodes:    nodes,
-			VMs:      allVMs,
+			PageData: PageData{
+				ActivePage: "proxmox",
+				Content:    renderTemplate(tmpl, "proxmox-content", contentData),
+			},
+			Nodes: nodes,
+			VMs:   allVMs,
 		}
 
 		tmpl.ExecuteTemplate(w, "layout", data)
@@ -219,9 +262,14 @@ func MetricsHandler(tmpl *template.Template, s *store.Store) http.HandlerFunc {
 		}
 		sort.Strings(targets)
 
+		contentData := struct{ Targets []string }{Targets: targets}
+
 		data := MetricsData{
-			PageData: PageData{ActivePage: "metrics"},
-			Targets:  targets,
+			PageData: PageData{
+				ActivePage: "metrics",
+				Content:    renderTemplate(tmpl, "metrics-content", contentData),
+			},
+			Targets: targets,
 		}
 
 		tmpl.ExecuteTemplate(w, "layout", data)
@@ -244,10 +292,9 @@ func HostHandler(tmpl *template.Template, s *store.Store) http.HandlerFunc {
 			if len(parts) == 3 {
 				vmID = parts[1]
 			}
-			vmType = "qemu" // default
+			vmType = "qemu"
 		}
 
-		// Get latest metrics
 		metrics := make(map[string]float64)
 		metricNames := []string{
 			"node.cpu.percent", "node.mem.percent",
@@ -260,11 +307,29 @@ func HostHandler(tmpl *template.Template, s *store.Store) http.HandlerFunc {
 			}
 		}
 
-		// Get recent checks
 		recentChecks, _ := s.GetRecentCheckResults(r.Context(), target, 20)
 
+		contentData := struct {
+			Target        string
+			IsVM          bool
+			VMID          string
+			VMType        string
+			LatestMetrics map[string]float64
+			RecentChecks  []checker.CheckResult
+		}{
+			Target:        target,
+			IsVM:          isVM,
+			VMID:          vmID,
+			VMType:        vmType,
+			LatestMetrics: metrics,
+			RecentChecks:  recentChecks,
+		}
+
 		data := HostData{
-			PageData:      PageData{ActivePage: ""},
+			PageData: PageData{
+				ActivePage: "",
+				Content:    renderTemplate(tmpl, "host-content", contentData),
+			},
 			Target:        target,
 			IsVM:          isVM,
 			VMID:          vmID,
