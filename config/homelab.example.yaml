@@ -6,28 +6,32 @@ server:
     username: "admin"
     password: "changeme"
 
+defaults:
+  interval: "60s"
+
 targets:
-  - name: "Router"
+  - name: "Example Service"
+    host: "192.168.1.100"
+    checks: [ping, http]
+    ports: [8080]
+  - name: "Example Router"
     host: "192.168.1.1"
     checks: [ping, http]
     ports: [80, 443]
-  - name: "NAS"
-    host: "192.168.1.10"
-    checks: [ping, smart]
 
 integrations:
   proxmox:
     enabled: false
-    host: "https://192.168.1.20:8006"
+    host: ""
     token_id: ""
     token_secret: ""
   jellyfin:
     enabled: false
-    host: "http://192.168.1.30:8096"
+    host: ""
     api_key: ""
   nas:
     enabled: false
-    smart_devices: ["/dev/sda", "/dev/sdb"]
+    smart_devices: []
 
 alerts:
   - name: "Service down"
