@@ -79,3 +79,32 @@ func (s *Store) GetUptimePercent(ctx context.Context, target, check string, wind
 
 	return float64(passed) / float64(total) * 100.0, nil
 }
+
+// GetRecentCheckResults returns the most recent check results for a target.
+func (s *Store) GetRecentCheckResults(ctx context.Context, target string, limit int) ([]checker.CheckResult, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT timestamp, target, check_name, status, message, latency_ms
+		 FROM check_results
+		 WHERE target = ?
+		 ORDER BY timestamp DESC
+		 LIMIT ?`,
+		target, limit)
+	if err != nil {
+		return nil, fmt.Errorf("store: get recent check results: %w", err)
+	}
+	defer rows.Close()
+
+	var results []checker.CheckResult
+	for rows.Next() {
+		var r checker.CheckResult
+		var latencyMs int64
+		var statusInt int
+		if err := rows.Scan(&r.Timestamp, &r.Target, &r.Check, &statusInt, &r.Message, &latencyMs); err != nil {
+			return nil, fmt.Errorf("store: scan check result: %w", err)
+		}
+		r.Status = checker.Status(statusInt)
+		r.Latency = time.Duration(latencyMs) * time.Millisecond
+		results = append(results, r)
+	}
+	return results, rows.Err()
+}
