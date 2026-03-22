@@ -1,0 +1,36 @@
+server:
+  host: "0.0.0.0"
+  port: 8080
+  auth:
+    enabled: true
+    username: "admin"
+    password: "changeme"
+
+targets:
+  - name: "Router"
+    host: "192.168.1.1"
+    checks: [ping, http]
+    ports: [80, 443]
+  - name: "NAS"
+    host: "192.168.1.10"
+    checks: [ping, smart]
+
+integrations:
+  proxmox:
+    enabled: false
+    host: "https://192.168.1.20:8006"
+    token_id: ""
+    token_secret: ""
+  jellyfin:
+    enabled: false
+    host: "http://192.168.1.30:8096"
+    api_key: ""
+  nas:
+    enabled: false
+    smart_devices: ["/dev/sda", "/dev/sdb"]
+
+alerts:
+  - name: "Service down"
+    condition: "status == down"
+    duration: "5m"
+    webhook: "https://hooks.slack.com/..."
