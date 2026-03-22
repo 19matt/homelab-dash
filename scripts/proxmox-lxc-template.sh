@@ -12,13 +12,24 @@ set -e
 #   ./proxmox-lxc-template.sh 201 local-lvm v0.1.0
 
 CTID=${1:-200}
-STORAGE=${2:-local}
+STORAGE=${2:-local-lvm}
 VERSION=${3:-v0.1.0}
 
+# Auto-detect template storage (needs vztmpl support)
+TEMPLATE_STORAGE="local"
+if ! pvesm status | grep -q "^${TEMPLATE_STORAGE}.*dir"; then
+    # Try to find any dir-based storage
+    TEMPLATE_STORAGE=$(pvesm status | awk '$2 == "dir" {print $1}' | head -1)
+    if [ -z "$TEMPLATE_STORAGE" ]; then
+        TEMPLATE_STORAGE="local"
+    fi
+fi
+
 echo "=== homelab-dash Proxmox LXC Setup ==="
-echo "CTID:    $CTID"
-echo "Storage: $STORAGE"
-echo "Version: $VERSION"
+echo "CTID:             $CTID"
+echo "Rootfs Storage:   $STORAGE"
+echo "Template Storage: $TEMPLATE_STORAGE"
+echo "Version:          $VERSION"
 echo ""
 
 # Find the latest Debian 12 template
@@ -39,9 +50,9 @@ fi
 echo "Using template: $TEMPLATE"
 
 # Check if template is downloaded
-if ! pveam list $STORAGE | grep -q "$TEMPLATE"; then
-    echo "Downloading template..."
-    pveam download $STORAGE $TEMPLATE
+if ! pveam list $TEMPLATE_STORAGE | grep -q "$TEMPLATE"; then
+    echo "Downloading template to $TEMPLATE_STORAGE..."
+    pveam download $TEMPLATE_STORAGE $TEMPLATE
 fi
 
 # Check if CTID already exists
@@ -61,7 +72,7 @@ IP="dhcp"
 
 echo ""
 echo "Creating LXC container..."
-pct create $CTID ${STORAGE}:vztmpl/${TEMPLATE} \
+pct create $CTID ${TEMPLATE_STORAGE}:vztmpl/${TEMPLATE} \
     --hostname homelab-dash \
     --memory 512 \
     --cores 1 \
