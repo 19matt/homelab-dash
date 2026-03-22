@@ -20,7 +20,9 @@
         <a href="/services" class="nav-link {{ if eq .ActivePage "services" }}active{{ end }}">Services</a>
         <a href="/proxmox" class="nav-link {{ if eq .ActivePage "proxmox" }}active{{ end }}">Proxmox</a>
         <a href="/metrics" class="nav-link {{ if eq .ActivePage "metrics" }}active{{ end }}">Metrics</a>
-        <a href="/security" class="nav-link {{ if eq .ActivePage "security" }}active{{ end }}">Security</a>
+        <a href="/security" class="nav-link {{ if eq .ActivePage "security" }}active{{ end }}">
+            Security <span id="nav-findings-badge" class="badge" hx-get="/fragments/findings-badge" hx-trigger="load" hx-swap="innerHTML">-</span>
+        </a>
         <a href="/alerts" class="nav-link {{ if eq .ActivePage "alerts" }}active{{ end }}">Alerts</a>
     </nav>
     <main class="main">

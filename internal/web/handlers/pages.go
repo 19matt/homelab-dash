@@ -81,6 +81,7 @@ type OverviewData struct {
 	VMsStopped    int
 	ServicesUp    int
 	ServicesTotal int
+	FindingsTotal int
 	StatusResults []checker.CheckResult
 	VMs           []proxmox.VMSummary
 	Nodes         []NodeStat
@@ -213,12 +214,20 @@ func OverviewHandler(tmpl *template.Template, s *store.Store, vmCollectors []*pr
 
 		nodes := getNodeStats(s)
 
+		// Get findings count
+		summary, _ := s.GetFindingsSummary(r.Context())
+		findingsTotal := 0
+		for _, count := range summary {
+			findingsTotal += count
+		}
+
 		contentData := struct {
 			NodesRunning  int
 			VMsRunning    int
 			VMsStopped    int
 			ServicesUp    int
 			ServicesTotal int
+			FindingsTotal int
 			StatusResults []checker.CheckResult
 			VMs           []proxmox.VMSummary
 			Nodes         []NodeStat
@@ -228,6 +237,7 @@ func OverviewHandler(tmpl *template.Template, s *store.Store, vmCollectors []*pr
 			VMsStopped:    stopped,
 			ServicesUp:    servicesUp,
 			ServicesTotal: len(results),
+			FindingsTotal: findingsTotal,
 			StatusResults: results,
 			VMs:           allVMs,
 			Nodes:         nodes,
@@ -243,6 +253,7 @@ func OverviewHandler(tmpl *template.Template, s *store.Store, vmCollectors []*pr
 			VMsStopped:    contentData.VMsStopped,
 			ServicesUp:    contentData.ServicesUp,
 			ServicesTotal: contentData.ServicesTotal,
+			FindingsTotal: contentData.FindingsTotal,
 			StatusResults: contentData.StatusResults,
 			VMs:           contentData.VMs,
 			Nodes:         contentData.Nodes,

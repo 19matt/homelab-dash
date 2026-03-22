@@ -82,6 +82,7 @@ func NewServer(cfg config.ServerConfig, s *store.Store, hub *Hub, vmCollectors [
 	mux.HandleFunc("GET /fragments/proxmox-summary", handlers.ProxmoxSummaryFragment(tmpl, s, vmCollectors))
 	mux.HandleFunc("GET /fragments/vm-table", handlers.VMTableFragment(tmpl, vmCollectors))
 	mux.HandleFunc("GET /fragments/security-summary", handlers.SecuritySummaryFragment(tmpl, s))
+	mux.HandleFunc("GET /fragments/findings-badge", handlers.FindingsBadgeFragment(s))
 
 	// Wrap with auth if enabled
 	var handler http.Handler = mux

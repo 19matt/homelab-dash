@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"html/template"
 	"net/http"
 
@@ -54,5 +55,29 @@ func VMTableFragment(tmpl *template.Template, vmCollectors []*proxmox.VMCollecto
 
 		w.Header().Set("Content-Type", "text/html")
 		tmpl.ExecuteTemplate(w, "fragment-vm-table", data)
+	}
+}
+
+// FindingsBadgeFragment returns the findings count badge for the nav.
+func FindingsBadgeFragment(s *store.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		summary, _ := s.GetFindingsSummary(r.Context())
+
+		critical := summary["critical"] + summary["high"]
+
+		w.Header().Set("Content-Type", "text/html")
+		if critical > 0 {
+			fmt.Fprintf(w, `<span class="badge badge-critical">%d</span>`, critical)
+		} else {
+			total := 0
+			for _, c := range summary {
+				total += c
+			}
+			if total > 0 {
+				fmt.Fprintf(w, `<span class="badge badge-unknown">%d</span>`, total)
+			} else {
+				fmt.Fprint(w, `<span class="badge badge-unknown">0</span>`)
+			}
+		}
 	}
 }

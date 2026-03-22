@@ -17,7 +17,38 @@
         <div class="stat-value">{{ .ServicesUp }}/{{ .ServicesTotal }}</div>
         <div class="stat-label">Services Up</div>
     </div>
+    <div class="stat-card">
+        <div class="stat-value {{ if gt .FindingsTotal 0 }}text-warn{{ end }}">{{ .FindingsTotal }}</div>
+        <div class="stat-label">Open Findings</div>
+    </div>
 </div>
+
+{{ if .Nodes }}
+<h2>Node Resources</h2>
+<div class="node-resources">
+    {{ range .Nodes }}
+    <div class="resource-row">
+        <div class="resource-name">{{ .Name }}</div>
+        <div class="resource-bars">
+            <div class="resource-bar">
+                <div class="resource-label">CPU</div>
+                <div class="resource-track">
+                    <div class="resource-fill" style="width: {{ .CPUPercent }}%; background: {{ barColor .CPUPercent }}"></div>
+                </div>
+                <span class="resource-value mono">{{ printf "%.0f" .CPUPercent }}%</span>
+            </div>
+            <div class="resource-bar">
+                <div class="resource-label">RAM</div>
+                <div class="resource-track">
+                    <div class="resource-fill" style="width: {{ .MemPercent }}%; background: {{ barColor .MemPercent }}"></div>
+                </div>
+                <span class="resource-value mono">{{ printf "%.0f" .MemPercent }}%</span>
+            </div>
+        </div>
+    </div>
+    {{ end }}
+</div>
+{{ end }}
 
 <h2>Services</h2>
 <div class="card-grid" id="status-grid"
@@ -25,11 +56,22 @@
     {{ template "fragment-status-grid" . }}
 </div>
 
-<h2>Proxmox</h2>
-<div id="proxmox-summary"
-     hx-get="/fragments/proxmox-summary" hx-trigger="every 30s" hx-swap="innerHTML">
-    {{ template "fragment-proxmox-summary" . }}
+{{ if .VMs }}
+<h2>Running VMs</h2>
+<div class="card-grid">
+    {{ range .VMs }}
+    {{ if eq .Status "running" }}
+    <div class="service-card">
+        <div>
+            <div class="service-name"><a href="/host/vm:{{ .VMID }}:{{ .Name }}">{{ .Name }}</a></div>
+            <div class="service-meta">{{ .Type }} &middot; {{ .VMID }}</div>
+        </div>
+        <span class="mono">{{ printf "%.1f" (mulf .CPU 100.0) }}% CPU</span>
+    </div>
+    {{ end }}
+    {{ end }}
 </div>
+{{ end }}
 {{ end }}
 
 {{ define "fragment-status-grid" }}
@@ -41,32 +83,5 @@
     </div>
     <span class="badge badge-{{ .Status.String }}" data-target="{{ .Target }}" data-check="{{ .Check }}">{{ .Status.String }}</span>
 </div>
-{{ end }}
-{{ end }}
-
-{{ define "fragment-proxmox-summary" }}
-{{ if .Nodes }}
-<div class="gauge-row">
-    {{ range .Nodes }}
-    <div class="gauge-card">
-        <div class="gauge-canvas"><canvas id="gauge-{{ .Name }}-cpu"></canvas></div>
-        <div class="gauge-label">{{ .Name }} CPU</div>
-    </div>
-    <div class="gauge-card">
-        <div class="gauge-canvas"><canvas id="gauge-{{ .Name }}-mem"></canvas></div>
-        <div class="gauge-label">{{ .Name }} RAM</div>
-    </div>
-    {{ end }}
-</div>
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    {{ range .Nodes }}
-    createGauge('gauge-{{ .Name }}-cpu', {{ .CPUPercent }}, 'CPU', {{ if gt .CPUPercent 80.0 }}'#ef4444'{{ else if gt .CPUPercent 50.0 }}'#f59e0b'{{ else }}'#22c55e'{{ end }});
-    createGauge('gauge-{{ .Name }}-mem', {{ .MemPercent }}, 'RAM', {{ if gt .MemPercent 80.0 }}'#ef4444'{{ else if gt .MemPercent 50.0 }}'#f59e0b'{{ else }}'#22c55e'{{ end }});
-    {{ end }}
-});
-</script>
-{{ else }}
-<p class="muted">No Proxmox data available</p>
 {{ end }}
 {{ end }}
