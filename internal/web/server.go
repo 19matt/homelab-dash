@@ -64,12 +64,16 @@ func NewServer(cfg config.ServerConfig, s *store.Store, hub *Hub, vmCollectors [
 	mux.HandleFunc("GET /api/security/report", handlers.ReportHandler(s))
 	mux.HandleFunc("GET /api/security/resolved", handlers.ResolvedFindingsHandler(s))
 
+	// Alerts API
+	mux.HandleFunc("GET /api/alerts/events", handlers.AlertEventsHandler(s))
+
 	// Page handlers
 	mux.HandleFunc("GET /{$}", handlers.OverviewHandler(tmpl, s, vmCollectors))
 	mux.HandleFunc("GET /services", handlers.ServicesHandler(tmpl, s))
 	mux.HandleFunc("GET /proxmox", handlers.ProxmoxHandler(tmpl, s, vmCollectors))
 	mux.HandleFunc("GET /metrics", handlers.MetricsHandler(tmpl, s))
 	mux.HandleFunc("GET /security", handlers.SecurityHandler(tmpl, s))
+	mux.HandleFunc("GET /alerts", handlers.AlertsHandler(tmpl, s))
 	mux.HandleFunc("GET /host/{target...}", handlers.HostHandler(tmpl, s))
 
 	// Htmx fragment handlers

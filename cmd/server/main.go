@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/homelab/homelab-dash/internal/alert"
 	"github.com/homelab/homelab-dash/internal/checker"
 	"github.com/homelab/homelab-dash/internal/config"
 	"github.com/homelab/homelab-dash/internal/integration/proxmox"
@@ -83,6 +84,15 @@ func main() {
 	sched.AddScanEngine(scanEngine, cfg.ScanInterval)
 	log.Printf("security scanner enabled: interval=%s", cfg.ScanInterval)
 
+	// Alert engine
+	rules := parseAlertRules(cfg.Alerts)
+	if len(rules) > 0 {
+		alertEngine := alert.NewEngine(rules)
+		alertEval := alert.NewEvaluator(alertEngine, s)
+		sched.AddEvaluator(alertEval, cfg.AlertInterval)
+		log.Printf("alert engine enabled: %d rules, interval=%s", len(rules), cfg.AlertInterval)
+	}
+
 	// Wire broadcast to SSE hub
 	sched.SetBroadcastFunc(func(target, check, status string, latencyMs int64) {
 		hub.Broadcast(web.SSEEvent{
@@ -131,4 +141,33 @@ func main() {
 	}
 
 	log.Println("server stopped")
+}
+
+// parseAlertRules converts config AlertConfigs to alert.Rules.
+func parseAlertRules(cfgs []config.AlertConfig) []alert.Rule {
+	var rules []alert.Rule
+	for _, c := range cfgs {
+		rule := alert.Rule{
+			Name:      c.Name,
+			Condition: alert.RuleCondition(c.Condition),
+			Target:    c.Target,
+			Metric:    c.Metric,
+			Threshold: c.Threshold,
+			Webhook:   c.Webhook,
+			Severity:  c.Severity,
+		}
+
+		if rule.Severity == "" {
+			rule.Severity = "warn"
+		}
+
+		if c.Duration != "" {
+			if d, err := time.ParseDuration(c.Duration); err == nil {
+				rule.Duration = d
+			}
+		}
+
+		rules = append(rules, rule)
+	}
+	return rules
 }

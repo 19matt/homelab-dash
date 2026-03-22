@@ -25,19 +25,30 @@ type scanEntry struct {
 	interval time.Duration
 }
 
+// EvalRunner is the interface for alert evaluators that can be scheduled.
+type EvalRunner interface {
+	Evaluate()
+}
+
 // ScanRunner is the interface for scan engines that can be scheduled.
 type ScanRunner interface {
 	Run(ctx context.Context) error
 }
 
-// Scheduler orchestrates periodic execution of checkers, collectors, and scans.
+// Scheduler orchestrates periodic execution of checkers, collectors, scans, and evaluations.
 type Scheduler struct {
 	checkers   []checkerEntry
 	collectors []collectorEntry
 	scans      []scanEntry
+	evaluators []evalEntry
 	store      *store.Store
 	interval   time.Duration
 	broadcast  func(target, check, status string, latencyMs int64)
+}
+
+type evalEntry struct {
+	evaluator EvalRunner
+	interval  time.Duration
 }
 
 // New creates a Scheduler with the given store and default interval.
@@ -78,7 +89,12 @@ func (sc *Scheduler) AddScanEngine(engine ScanRunner, interval time.Duration) {
 	sc.scans = append(sc.scans, scanEntry{engine: engine, interval: interval})
 }
 
-// Run starts goroutines for each registered checker, collector, and scan.
+// AddEvaluator registers an alert evaluator to run at the given interval.
+func (sc *Scheduler) AddEvaluator(evaluator EvalRunner, interval time.Duration) {
+	sc.evaluators = append(sc.evaluators, evalEntry{evaluator: evaluator, interval: interval})
+}
+
+// Run starts goroutines for each registered checker, collector, scan, and evaluator.
 // It blocks until ctx is cancelled.
 func (sc *Scheduler) Run(ctx context.Context) {
 	for i, e := range sc.checkers {
@@ -89,6 +105,9 @@ func (sc *Scheduler) Run(ctx context.Context) {
 	}
 	for i, e := range sc.scans {
 		go sc.runScan(ctx, e, time.Duration(i)*time.Second)
+	}
+	for i, e := range sc.evaluators {
+		go sc.runEvaluator(ctx, e, time.Duration(i)*time.Second)
 	}
 	<-ctx.Done()
 }
@@ -204,5 +223,29 @@ func (sc *Scheduler) runScan(ctx context.Context, e scanEntry, delay time.Durati
 func (sc *Scheduler) executeScan(ctx context.Context, engine ScanRunner) {
 	if err := engine.Run(ctx); err != nil {
 		log.Printf("scan engine: error: %v", err)
+	}
+}
+
+func (sc *Scheduler) runEvaluator(ctx context.Context, e evalEntry, delay time.Duration) {
+	if delay > 0 {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(delay):
+		}
+	}
+
+	ticker := time.NewTicker(e.interval)
+	defer ticker.Stop()
+
+	e.evaluator.Evaluate()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			e.evaluator.Evaluate()
+		}
 	}
 }
