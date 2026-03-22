@@ -1,0 +1,75 @@
+{{ define "content" }}
+<h1>Metrics</h1>
+
+<select id="target-select" onchange="onTargetChange(this.value)">
+    {{ range .Targets }}
+    <option value="{{ . }}">{{ . }}</option>
+    {{ end }}
+</select>
+
+<div class="time-range">
+    <button data-window="1h" onclick="onWindowClick('1h')">1h</button>
+    <button data-window="6h" onclick="onWindowClick('6h')" class="active">6h</button>
+    <button data-window="24h" onclick="onWindowClick('24h')">24h</button>
+    <button data-window="7d" onclick="onWindowClick('7d')">7d</button>
+</div>
+
+<div class="chart-grid">
+    <div class="chart-container">
+        <div class="chart-title">CPU %</div>
+        <canvas id="chart-cpu"></canvas>
+    </div>
+    <div class="chart-container">
+        <div class="chart-title">Memory %</div>
+        <canvas id="chart-mem"></canvas>
+    </div>
+    <div class="chart-container">
+        <div class="chart-title">Net In</div>
+        <canvas id="chart-netin"></canvas>
+    </div>
+    <div class="chart-container">
+        <div class="chart-title">Net Out</div>
+        <canvas id="chart-netout"></canvas>
+    </div>
+</div>
+
+<script>
+var currentTarget = {{ if .Targets }}'{{ index .Targets 0 }}'{{ else }}''{{ end }};
+var currentWindow = '6h';
+
+function onTargetChange(target) {
+    currentTarget = target;
+    loadCharts();
+}
+
+function onWindowClick(window) {
+    currentWindow = window;
+    document.querySelectorAll('.time-range button').forEach(function(b) {
+        b.classList.remove('active');
+        if (b.dataset.window === window) b.classList.add('active');
+    });
+    loadCharts();
+}
+
+function loadCharts() {
+    if (!currentTarget) return;
+
+    var prefix = currentTarget.startsWith('node:') ? 'node.' : 'vm.';
+
+    updateChart('chart-cpu', currentTarget, prefix + 'cpu.percent', currentWindow);
+    updateChart('chart-mem', currentTarget, prefix + 'mem.percent', currentWindow);
+
+    if (prefix === 'vm.') {
+        updateChart('chart-netin', currentTarget, 'vm.netin', currentWindow);
+        updateChart('chart-netout', currentTarget, 'vm.netout', currentWindow);
+    } else {
+        updateChart('chart-netin', currentTarget, 'node.load1', currentWindow);
+        updateChart('chart-netout', currentTarget, 'node.load5', currentWindow);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadCharts();
+});
+</script>
+{{ end }}

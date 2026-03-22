@@ -1,0 +1,27 @@
+{{ define "content" }}
+<h1>Services</h1>
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Status</th>
+            <th>Last Check</th>
+            <th>Latency</th>
+            <th>24h Uptime</th>
+            <th>7d Uptime</th>
+        </tr>
+    </thead>
+    <tbody>
+        {{ range .Rows }}
+        <tr>
+            <td><a href="/host/{{ .Target }}">{{ .Target }}</a></td>
+            <td><span class="badge badge-{{ .Status }}" data-target="{{ .Target }}" data-check="{{ .Check }}">{{ .Status }}</span></td>
+            <td class="mono" title="{{ .Timestamp }}">{{ .Timestamp.Format "15:04:05" }}</td>
+            <td class="mono">{{ .LatencyMs }}ms</td>
+            <td class="mono">{{ printf "%.1f" .Uptime24h }}%</td>
+            <td class="mono">{{ printf "%.1f" .Uptime7d }}%</td>
+        </tr>
+        {{ end }}
+    </tbody>
+</table>
+{{ end }}

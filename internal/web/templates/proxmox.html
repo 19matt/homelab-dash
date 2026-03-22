@@ -1,0 +1,64 @@
+{{ define "content" }}
+<h1>Proxmox</h1>
+
+{{ if .Nodes }}
+<div class="gauge-row">
+    {{ range .Nodes }}
+    <div class="gauge-card">
+        <div class="gauge-canvas"><canvas id="gauge-{{ .Name }}-cpu"></canvas></div>
+        <div class="gauge-label">{{ .Name }} CPU</div>
+    </div>
+    <div class="gauge-card">
+        <div class="gauge-canvas"><canvas id="gauge-{{ .Name }}-mem"></canvas></div>
+        <div class="gauge-label">{{ .Name }} RAM</div>
+    </div>
+    {{ end }}
+</div>
+{{ end }}
+
+<h2>Virtual Machines</h2>
+<div id="vm-table"
+     hx-get="/fragments/vm-table" hx-trigger="every 30s" hx-swap="innerHTML">
+    {{ template "fragment-vm-table" . }}
+</div>
+
+{{ if .Nodes }}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    {{ range .Nodes }}
+    createGauge('gauge-{{ .Name }}-cpu', {{ .CPUPercent }}, 'CPU', {{ if gt .CPUPercent 80.0 }}'#ef4444'{{ else if gt .CPUPercent 50.0 }}'#f59e0b'{{ else }}'#22c55e'{{ end }});
+    createGauge('gauge-{{ .Name }}-mem', {{ .MemPercent }}, 'RAM', {{ if gt .MemPercent 80.0 }}'#ef4444'{{ else if gt .MemPercent 50.0 }}'#f59e0b'{{ else }}'#22c55e'{{ end }});
+    {{ end }}
+});
+</script>
+{{ end }}
+{{ end }}
+
+{{ define "fragment-vm-table" }}
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>VMID</th>
+            <th>Type</th>
+            <th>Status</th>
+            <th>CPU %</th>
+            <th>RAM %</th>
+            <th>Disk %</th>
+        </tr>
+    </thead>
+    <tbody>
+        {{ range .VMs }}
+        <tr>
+            <td><a href="/host/vm:{{ .VMID }}:{{ .Name }}">{{ .Name }}</a></td>
+            <td class="mono">{{ .VMID }}</td>
+            <td>{{ .Type }}</td>
+            <td><span class="badge badge-{{ if eq .Status "running" }}pass{{ else if eq .Status "stopped" }}fail{{ else }}warn{{ end }}">{{ .Status }}</span></td>
+            <td class="mono">{{ printf "%.1f" (mulf .CPU 100.0) }}%</td>
+            <td class="mono">{{ if gt .MaxMem 0 }}{{ printf "%.1f" (divf (tof .Mem) (tof .MaxMem) 100.0) }}%{{ else }}-{{ end }}</td>
+            <td class="mono">{{ if gt .MaxDisk 0 }}{{ printf "%.1f" (divf (tof .Disk) (tof .MaxDisk) 100.0) }}%{{ else }}-{{ end }}</td>
+        </tr>
+        {{ end }}
+    </tbody>
+</table>
+{{ end }}

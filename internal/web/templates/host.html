@@ -1,0 +1,72 @@
+{{ define "content" }}
+<h1>{{ .Target }}</h1>
+
+{{ if .IsVM }}
+<div style="margin-bottom: 1rem;">
+    <span class="badge badge-pass">VMID: {{ .VMID }}</span>
+    <span class="badge badge-unknown">{{ .VMType }}</span>
+</div>
+{{ end }}
+
+<div class="stat-row">
+    {{ if .LatestMetrics }}
+    {{ if index .LatestMetrics "node.cpu.percent" }}
+    <div class="stat-card">
+        <div class="stat-value mono">{{ printf "%.1f" (index .LatestMetrics "node.cpu.percent") }}%</div>
+        <div class="stat-label">CPU</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value mono">{{ printf "%.1f" (index .LatestMetrics "node.mem.percent") }}%</div>
+        <div class="stat-label">Memory</div>
+    </div>
+    {{ else if index .LatestMetrics "vm.cpu.percent" }}
+    <div class="stat-card">
+        <div class="stat-value mono">{{ printf "%.1f" (index .LatestMetrics "vm.cpu.percent") }}%</div>
+        <div class="stat-label">CPU</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value mono">{{ printf "%.1f" (index .LatestMetrics "vm.mem.percent") }}%</div>
+        <div class="stat-label">Memory</div>
+    </div>
+    {{ end }}
+    {{ end }}
+</div>
+
+{{ if .LatestMetrics }}
+<h2>CPU History (1h)</h2>
+<div class="chart-container" style="height: 200px;">
+    <canvas id="chart-host-cpu"></canvas>
+</div>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var target = '{{ .Target }}';
+    var prefix = target.startsWith('node:') ? 'node.' : 'vm.';
+    updateChart('chart-host-cpu', target, prefix + 'cpu.percent', '1h');
+});
+</script>
+{{ end }}
+
+<h2>Recent Checks</h2>
+<table>
+    <thead>
+        <tr>
+            <th>Time</th>
+            <th>Check</th>
+            <th>Status</th>
+            <th>Message</th>
+            <th>Latency</th>
+        </tr>
+    </thead>
+    <tbody>
+        {{ range .RecentChecks }}
+        <tr>
+            <td class="mono">{{ .Timestamp.Format "15:04:05" }}</td>
+            <td>{{ .Check }}</td>
+            <td><span class="badge badge-{{ .Status.String }}">{{ .Status.String }}</span></td>
+            <td>{{ .Message }}</td>
+            <td class="mono">{{ .Latency.Milliseconds }}ms</td>
+        </tr>
+        {{ end }}
+    </tbody>
+</table>
+{{ end }}

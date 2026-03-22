@@ -1,0 +1,64 @@
+{{ define "content" }}
+<h1>Overview</h1>
+<div class="stat-row">
+    <div class="stat-card">
+        <div class="stat-value">{{ .NodesRunning }}</div>
+        <div class="stat-label">Nodes</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ .VMsRunning }}</div>
+        <div class="stat-label">VMs Running</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ .VMsStopped }}</div>
+        <div class="stat-label">VMs Stopped</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ .ServicesUp }}/{{ .ServicesTotal }}</div>
+        <div class="stat-label">Services Up</div>
+    </div>
+</div>
+
+<h2>Services</h2>
+<div class="card-grid" id="status-grid"
+     hx-get="/fragments/status-grid" hx-trigger="every 30s" hx-swap="innerHTML">
+    {{ range .StatusResults }}
+    <div class="service-card">
+        <div>
+            <div class="service-name">{{ .Target }}</div>
+            <div class="service-meta">{{ .Check }} &middot; {{ .Latency.Milliseconds }}ms</div>
+        </div>
+        <span class="badge badge-{{ .Status.String }}" data-target="{{ .Target }}" data-check="{{ .Check }}">{{ .Status.String }}</span>
+    </div>
+    {{ end }}
+</div>
+
+<h2>Proxmox</h2>
+<div id="proxmox-summary"
+     hx-get="/fragments/proxmox-summary" hx-trigger="every 30s" hx-swap="innerHTML">
+    {{ if .Nodes }}
+    <div class="gauge-row">
+        {{ range .Nodes }}
+        <div class="gauge-card">
+            <div class="gauge-canvas"><canvas id="gauge-{{ .Name }}-cpu"></canvas></div>
+            <div class="gauge-label">{{ .Name }} CPU</div>
+        </div>
+        <div class="gauge-card">
+            <div class="gauge-canvas"><canvas id="gauge-{{ .Name }}-mem"></canvas></div>
+            <div class="gauge-label">{{ .Name }} RAM</div>
+        </div>
+        {{ end }}
+    </div>
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        {{ range .Nodes }}
+        createGauge('gauge-{{ .Name }}-cpu', {{ .CPUPercent }}, 'CPU', {{ if gt .CPUPercent 80.0 }}'#ef4444'{{ else if gt .CPUPercent 50.0 }}'#f59e0b'{{ else }}'#22c55e'{{ end }});
+        createGauge('gauge-{{ .Name }}-mem', {{ .MemPercent }}, 'RAM', {{ if gt .MemPercent 80.0 }}'#ef4444'{{ else if gt .MemPercent 50.0 }}'#f59e0b'{{ else }}'#22c55e'{{ end }});
+        {{ end }}
+    });
+    </script>
+    {{ else }}
+    <p class="muted">No Proxmox data available</p>
+    {{ end }}
+</div>
+{{ end }}
