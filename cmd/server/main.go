@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"os/signal"
 	"syscall"
 	"time"
@@ -22,21 +23,43 @@ import (
 	"github.com/homelab/homelab-dash/internal/web"
 )
 
+var (
+	Version   = "dev"
+	BuildTime = "unknown"
+)
+
 func main() {
+	showVersion := flag.Bool("version", false, "show version and exit")
+	migrate := flag.Bool("migrate", false, "run database migrations and exit")
 	configPath := flag.String("config", "config/homelab.yaml", "path to config file")
 	dbPath := flag.String("db", "homelab.db", "path to SQLite database")
 	flag.Parse()
 
-	cfg, err := config.Load(*configPath)
-	if err != nil {
-		log.Fatalf("failed to load config: %v", err)
+	if *showVersion {
+		fmt.Printf("homelab-dash %s (built %s)\n", Version, BuildTime)
+		os.Exit(0)
 	}
 
+	// Open database (runs migrations)
 	s, err := store.Open(*dbPath)
 	if err != nil {
 		log.Fatalf("failed to open database: %v", err)
 	}
+
+	if *migrate {
+		log.Printf("migrations complete, exiting")
+		s.Close()
+		return
+	}
+
+	// Load config
+	cfg, err := config.Load(*configPath)
+	if err != nil {
+		log.Fatalf("failed to load config: %v", err)
+	}
 	defer s.Close()
+
+	startTime := time.Now()
 
 	// Create SSE hub
 	hub := web.NewHub()
@@ -44,37 +67,20 @@ func main() {
 	// Register service checkers from config
 	sched := scheduler.New(s, cfg.Interval)
 	for _, t := range cfg.Targets {
-		for _, check := range t.Checks {
-			switch check {
-			case "ping":
-				port := 80
-				if len(t.Endpoint) > 0 {
-					port = t.Endpoint[0].Port
-				}
-				sched.AddChecker(checker.NewPingChecker(t.Name, t.Host, port))
-			case "http":
-				for _, ep := range t.Endpoint {
-					sched.AddChecker(checker.NewHTTPChecker(t.Name, t.Host, ep.Port, ep.Protocol))
-				}
-			}
-		}
+		registerCheckers(sched, t)
 	}
 
 	// Optional: Proxmox integration (multi-node)
 	var vmCollectors []*proxmox.VMCollector
 	if cfg.Integrations.Proxmox.Enabled {
 		pveClient := proxmox.NewClient(cfg.Integrations.Proxmox)
-
 		for _, node := range cfg.Integrations.Proxmox.Nodes {
 			sched.AddCollectorWithInterval(proxmox.NewNodeCollector(pveClient, node), 30*time.Second)
-
 			vmCollector := proxmox.NewVMCollector(pveClient, node)
 			vmCollectors = append(vmCollectors, vmCollector)
 			sched.AddCollectorWithInterval(vmCollector, 30*time.Second)
-
 			sched.AddCheckerWithInterval(proxmox.NewVMChecker(pveClient, node), cfg.Interval)
 		}
-
 		log.Printf("proxmox integration enabled: nodes=%v", cfg.Integrations.Proxmox.Nodes)
 	}
 
@@ -123,8 +129,30 @@ func main() {
 		})
 	})
 
+	// Audit: startup event
+	s.SaveAuditEvent(context.Background(), store.AuditEvent{
+		Timestamp: startTime,
+		Type:      store.AuditStartup,
+		Message:   fmt.Sprintf("homelab-dash %s started", Version),
+	})
+
+	// Collect enabled integrations for admin status
+	var integrationsEnabled []string
+	if cfg.Integrations.Proxmox.Enabled {
+		integrationsEnabled = append(integrationsEnabled, "proxmox")
+	}
+	if cfg.Integrations.Jellyfin.Enabled {
+		integrationsEnabled = append(integrationsEnabled, "jellyfin")
+	}
+	if cfg.Integrations.Frigate.Enabled {
+		integrationsEnabled = append(integrationsEnabled, "frigate")
+	}
+	if cfg.Integrations.NAS.Enabled {
+		integrationsEnabled = append(integrationsEnabled, "nas")
+	}
+
 	// Create web server with all routes
-	srv, err := web.NewServer(cfg.Server, s, hub, vmCollectors, jellyfinClient, frigateClient)
+	srv, err := web.NewServer(cfg.Server, s, hub, vmCollectors, jellyfinClient, frigateClient, cfg, sched, Version, BuildTime, startTime, integrationsEnabled)
 	if err != nil {
 		log.Fatalf("failed to create web server: %v", err)
 	}
@@ -136,6 +164,9 @@ func main() {
 	// Start scheduler
 	go sched.Run(ctx)
 
+	// Start data retention cleanup (daily at midnight)
+	go startRetentionCleanup(ctx, s)
+
 	// Start HTTP server
 	addr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
 	httpServer := &http.Server{
@@ -144,7 +175,7 @@ func main() {
 	}
 
 	go func() {
-		log.Printf("starting server on %s (interval: %s)", addr, cfg.Interval)
+		log.Printf("starting server on %s (version: %s, interval: %s)", addr, Version, cfg.Interval)
 		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("server error: %v", err)
 		}
@@ -163,7 +194,48 @@ func main() {
 	log.Println("server stopped")
 }
 
-// parseAlertRules converts config AlertConfigs to alert.Rules.
+func registerCheckers(sched *scheduler.Scheduler, t config.TargetConfig) {
+	for _, check := range t.Checks {
+		switch check {
+		case "ping":
+			port := 80
+			if len(t.Endpoint) > 0 {
+				port = t.Endpoint[0].Port
+			}
+			sched.AddChecker(checker.NewPingChecker(t.Name, t.Host, port))
+		case "http":
+			for _, ep := range t.Endpoint {
+				sched.AddChecker(checker.NewHTTPChecker(t.Name, t.Host, ep.Port, ep.Protocol))
+			}
+		}
+	}
+}
+
+func startRetentionCleanup(ctx context.Context, s *store.Store) {
+	// Wait until midnight, then run daily
+	now := time.Now()
+	nextMidnight := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, now.Location())
+	time.Sleep(time.Until(nextMidnight))
+
+	ticker := time.NewTicker(24 * time.Hour)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			maxAge := 90 * 24 * time.Hour // 90 days
+			deleted, err := s.RunRetentionCleanup(ctx, maxAge)
+			if err != nil {
+				log.Printf("retention cleanup error: %v", err)
+			} else if deleted > 0 {
+				log.Printf("retention cleanup: deleted %d old records", deleted)
+			}
+		}
+	}
+}
+
 func parseAlertRules(cfgs []config.AlertConfig) []alert.Rule {
 	var rules []alert.Rule
 	for _, c := range cfgs {
@@ -176,17 +248,14 @@ func parseAlertRules(cfgs []config.AlertConfig) []alert.Rule {
 			Webhook:   c.Webhook,
 			Severity:  c.Severity,
 		}
-
 		if rule.Severity == "" {
 			rule.Severity = "warn"
 		}
-
 		if c.Duration != "" {
 			if d, err := time.ParseDuration(c.Duration); err == nil {
 				rule.Duration = d
 			}
 		}
-
 		rules = append(rules, rule)
 	}
 	return rules

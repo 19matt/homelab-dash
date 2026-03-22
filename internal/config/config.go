@@ -23,6 +23,9 @@ type Config struct {
 	ScanInterval time.Duration `yaml:"-"`
 	// Parsed from Defaults.AlertInterval, defaults to Interval.
 	AlertInterval time.Duration `yaml:"-"`
+
+	// Internal: path to config file for saving
+	configPath string `yaml:"-"`
 }
 
 // DefaultsConfig holds global default settings.
@@ -143,7 +146,26 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("config: validation: %w", err)
 	}
 
+	cfg.configPath = path
 	return &cfg, nil
+}
+
+// Save writes the config back to the file it was loaded from.
+func (c *Config) Save() error {
+	if c.configPath == "" {
+		return fmt.Errorf("config: no path set, cannot save")
+	}
+
+	data, err := yaml.Marshal(c)
+	if err != nil {
+		return fmt.Errorf("config: marshal: %w", err)
+	}
+
+	if err := os.WriteFile(c.configPath, data, 0644); err != nil {
+		return fmt.Errorf("config: write %s: %w", c.configPath, err)
+	}
+
+	return nil
 }
 
 // Validate checks that all required fields are present and consistent.

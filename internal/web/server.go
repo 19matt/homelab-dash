@@ -5,11 +5,13 @@ import (
 	"html/template"
 	"io/fs"
 	"net/http"
+	"time"
 
 	"github.com/homelab/homelab-dash/internal/config"
 	"github.com/homelab/homelab-dash/internal/integration/frigate"
 	"github.com/homelab/homelab-dash/internal/integration/jellyfin"
 	"github.com/homelab/homelab-dash/internal/integration/proxmox"
+	"github.com/homelab/homelab-dash/internal/scheduler"
 	"github.com/homelab/homelab-dash/internal/store"
 	"github.com/homelab/homelab-dash/internal/web/handlers"
 )
@@ -23,7 +25,19 @@ type Server struct {
 }
 
 // NewServer creates a new web server with all routes registered.
-func NewServer(cfg config.ServerConfig, s *store.Store, hub *Hub, vmCollectors []*proxmox.VMCollector, jellyfinClient *jellyfin.Client, frigateClient *frigate.Client) (*Server, error) {
+func NewServer(
+	cfg config.ServerConfig,
+	s *store.Store,
+	hub *Hub,
+	vmCollectors []*proxmox.VMCollector,
+	jellyfinClient *jellyfin.Client,
+	frigateClient *frigate.Client,
+	fullCfg *config.Config,
+	sched *scheduler.Scheduler,
+	version, buildTime string,
+	startTime time.Time,
+	integrationsEnabled []string,
+) (*Server, error) {
 	// Parse templates
 	tmpl, err := template.New("").Funcs(handlers.TemplateFuncMap).ParseFS(StaticFS, "templates/*.html")
 	if err != nil {
@@ -50,7 +64,7 @@ func NewServer(cfg config.ServerConfig, s *store.Store, hub *Hub, vmCollectors [
 	// SSE
 	mux.Handle("GET /events", hub)
 
-	// JSON API (existing)
+	// JSON API
 	mux.HandleFunc("GET /api/status", handlers.StatusHandler(s))
 	mux.HandleFunc("GET /api/uptime", handlers.UptimeHandler(s))
 	mux.HandleFunc("GET /api/uptime/daily", handlers.DailyUptimeHandler(s))
@@ -70,6 +84,17 @@ func NewServer(cfg config.ServerConfig, s *store.Store, hub *Hub, vmCollectors [
 	// Alerts API
 	mux.HandleFunc("GET /api/alerts/events", handlers.AlertEventsHandler(s))
 
+	// Admin API
+	mux.HandleFunc("GET /admin/status", handlers.AdminStatusHandler(s, version, buildTime, startTime, integrationsEnabled))
+
+	// Audit API
+	mux.HandleFunc("GET /api/audit/events", handlers.AuditEventsHandler(s))
+
+	// Settings API
+	mux.HandleFunc("POST /api/targets", handlers.AddTargetHandler(fullCfg, s))
+	mux.HandleFunc("DELETE /api/targets/{name}", handlers.RemoveTargetHandler(fullCfg, s))
+	mux.HandleFunc("POST /api/targets/test", handlers.TestTargetHandler())
+
 	// Page handlers
 	mux.HandleFunc("GET /{$}", handlers.OverviewHandler(tmpl, s, vmCollectors, jellyfinClient, frigateClient))
 	mux.HandleFunc("GET /services", handlers.ServicesHandler(tmpl, s))
@@ -78,6 +103,8 @@ func NewServer(cfg config.ServerConfig, s *store.Store, hub *Hub, vmCollectors [
 	mux.HandleFunc("GET /security", handlers.SecurityHandler(tmpl, s))
 	mux.HandleFunc("GET /alerts", handlers.AlertsHandler(tmpl, s))
 	mux.HandleFunc("GET /host/{target...}", handlers.HostHandler(tmpl, s))
+	mux.HandleFunc("GET /settings", handlers.SettingsHandler(tmpl, fullCfg))
+	mux.HandleFunc("GET /audit", handlers.AuditHandler(tmpl, s))
 
 	// Conditional integration pages
 	if jellyfinClient != nil {
@@ -94,7 +121,6 @@ func NewServer(cfg config.ServerConfig, s *store.Store, hub *Hub, vmCollectors [
 	mux.HandleFunc("GET /fragments/security-summary", handlers.SecuritySummaryFragment(tmpl, s))
 	mux.HandleFunc("GET /fragments/findings-badge", handlers.FindingsBadgeFragment(s))
 
-	// Conditional integration fragments
 	if jellyfinClient != nil {
 		mux.HandleFunc("GET /fragments/jellyfin-summary", handlers.JellyfinSummaryFragment(jellyfinClient))
 	}
