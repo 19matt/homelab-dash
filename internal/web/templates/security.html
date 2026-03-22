@@ -10,6 +10,13 @@
     <span class="badge badge-critical" style="cursor:pointer" onclick="filterSeverity('critical')">critical: {{ .Summary.critical }}</span>
 </div>
 
+<div class="tab-bar">
+    <button class="tab active" id="tab-active" onclick="showTab('active')">Active Findings</button>
+    <button class="tab" id="tab-resolved" onclick="showTab('resolved')">Resolved (history)</button>
+</div>
+
+<!-- Active findings tab -->
+<div id="panel-active">
 <div class="filter-bar">
     <div class="filter-group">
         <label class="filter-label">Target</label>
@@ -84,8 +91,74 @@
         {{ end }}
     </tbody>
 </table>
+</div>
+
+<!-- Resolved findings tab -->
+<div id="panel-resolved" style="display:none">
+<p class="muted" style="margin-bottom: 1rem;">Findings that were present in previous scans but are no longer detected. Shows when the issue was first seen, last seen, and when it was resolved.</p>
+<table>
+    <thead>
+        <tr>
+            <th>Severity</th>
+            <th>Target</th>
+            <th>Title</th>
+            <th>First Seen</th>
+            <th>Last Seen</th>
+            <th>Resolved</th>
+        </tr>
+    </thead>
+    <tbody id="resolved-tbody">
+        <!-- Populated by JS -->
+    </tbody>
+</table>
+</div>
 
 <script>
+function showTab(name) {
+    document.getElementById('panel-active').style.display = name === 'active' ? '' : 'none';
+    document.getElementById('panel-resolved').style.display = name === 'resolved' ? '' : 'none';
+    document.getElementById('tab-active').classList.toggle('active', name === 'active');
+    document.getElementById('tab-resolved').classList.toggle('active', name === 'resolved');
+
+    if (name === 'resolved') {
+        loadResolved();
+    }
+}
+
+function loadResolved() {
+    fetch('/api/security/resolved')
+        .then(function(r) { return r.json(); })
+        .then(function(findings) {
+            var tbody = document.getElementById('resolved-tbody');
+            tbody.innerHTML = '';
+            var sevNames = ['info', 'low', 'medium', 'high', 'critical'];
+            var sevBadges = ['badge-unknown', 'badge-low', 'badge-warn', 'badge-fail', 'badge-critical'];
+
+            findings.forEach(function(f) {
+                var sevIdx = f.Severity || 0;
+                var tr = document.createElement('tr');
+                tr.innerHTML =
+                    '<td><span class="badge ' + sevBadges[sevIdx] + '">' + sevNames[sevIdx] + '</span></td>' +
+                    '<td>' + f.Target + '</td>' +
+                    '<td>' + f.Title + '</td>' +
+                    '<td class="mono">' + formatTime(f.FirstSeen || f.Timestamp) + '</td>' +
+                    '<td class="mono">' + formatTime(f.LastSeen || f.Timestamp) + '</td>' +
+                    '<td class="mono">' + (f.ResolvedAt ? formatTime(f.ResolvedAt) : '-') + '</td>';
+                tbody.appendChild(tr);
+            });
+
+            if (findings.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="muted" style="text-align:center;padding:2rem;">No resolved findings yet</td></tr>';
+            }
+        });
+}
+
+function formatTime(iso) {
+    if (!iso) return '-';
+    var d = new Date(iso);
+    return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+}
+
 function filterSeverity(sev) {
     document.getElementById('filter-severity').value = sev;
     applyFilters();
@@ -104,7 +177,6 @@ function applyFilters() {
         var matchSeverity = !severity || row.dataset.severity === severity;
         var show = matchTarget && matchScanner && matchSeverity;
         row.style.display = show ? '' : 'none';
-        // Also hide/show the detail row
         var detail = row.nextElementSibling;
         if (detail && detail.classList.contains('finding-detail')) {
             if (!show) detail.style.display = 'none';

@@ -112,3 +112,21 @@ func severityToInt(s string) int {
 		return 0
 	}
 }
+
+// ResolvedFindingsHandler returns resolved findings as JSON.
+func ResolvedFindingsHandler(s *store.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		findings, err := s.GetResolvedFindings(r.Context(), 100)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		if findings == nil {
+			findings = []store.ResolvedFinding{}
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(findings)
+	}
+}

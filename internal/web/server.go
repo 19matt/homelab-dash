@@ -62,6 +62,7 @@ func NewServer(cfg config.ServerConfig, s *store.Store, hub *Hub, vmCollectors [
 	mux.HandleFunc("GET /api/security/findings", handlers.FindingsHandler(s))
 	mux.HandleFunc("GET /api/security/summary", handlers.SummaryHandler(s))
 	mux.HandleFunc("GET /api/security/report", handlers.ReportHandler(s))
+	mux.HandleFunc("GET /api/security/resolved", handlers.ResolvedFindingsHandler(s))
 
 	// Page handlers
 	mux.HandleFunc("GET /{$}", handlers.OverviewHandler(tmpl, s, vmCollectors))

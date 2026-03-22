@@ -222,9 +222,9 @@ func (s *Store) GetFindingByID(ctx context.Context, id int64) (*Finding, error) 
 }
 
 // GetResolvedFindings returns findings that were resolved (not in current scan).
-func (s *Store) GetResolvedFindings(ctx context.Context, limit int) ([]Finding, error) {
+func (s *Store) GetResolvedFindings(ctx context.Context, limit int) ([]ResolvedFinding, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, last_seen, target, scanner, title, description, severity, remediation
+		`SELECT id, first_seen, last_seen, resolved_at, target, scanner, title, description, severity, remediation
 		 FROM findings_history
 		 WHERE resolved_at IS NOT NULL
 		 ORDER BY resolved_at DESC
@@ -234,14 +234,28 @@ func (s *Store) GetResolvedFindings(ctx context.Context, limit int) ([]Finding, 
 	}
 	defer rows.Close()
 
-	var findings []Finding
+	var findings []ResolvedFinding
 	for rows.Next() {
-		var f Finding
-		if err := rows.Scan(&f.ID, &f.Timestamp, &f.Target, &f.Scanner,
-			&f.Title, &f.Description, &f.Severity, &f.Remediation); err != nil {
+		var f ResolvedFinding
+		if err := rows.Scan(&f.ID, &f.FirstSeen, &f.LastSeen, &f.ResolvedAt,
+			&f.Target, &f.Scanner, &f.Title, &f.Description, &f.Severity, &f.Remediation); err != nil {
 			return nil, fmt.Errorf("store: scan resolved finding: %w", err)
 		}
 		findings = append(findings, f)
 	}
 	return findings, rows.Err()
+}
+
+// ResolvedFinding represents a finding from the history table with resolution info.
+type ResolvedFinding struct {
+	ID          int64      `json:"id"`
+	FirstSeen   time.Time  `json:"first_seen"`
+	LastSeen    time.Time  `json:"last_seen"`
+	ResolvedAt  *time.Time `json:"resolved_at"`
+	Target      string     `json:"target"`
+	Scanner     string     `json:"scanner"`
+	Title       string     `json:"title"`
+	Description string     `json:"description"`
+	Severity    int        `json:"severity"`
+	Remediation string     `json:"remediation"`
 }
