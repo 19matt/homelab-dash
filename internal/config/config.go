@@ -21,12 +21,15 @@ type Config struct {
 	Interval time.Duration `yaml:"-"`
 	// Parsed from Defaults.ScanInterval, defaults to 6h.
 	ScanInterval time.Duration `yaml:"-"`
+	// Parsed from Defaults.AlertInterval, defaults to Interval.
+	AlertInterval time.Duration `yaml:"-"`
 }
 
 // DefaultsConfig holds global default settings.
 type DefaultsConfig struct {
-	Interval     string `yaml:"interval"`
-	ScanInterval string `yaml:"scan_interval"`
+	Interval      string `yaml:"interval"`
+	ScanInterval  string `yaml:"scan_interval"`
+	AlertInterval string `yaml:"alert_interval"`
 }
 
 // ServerConfig holds HTTP server settings.
@@ -106,10 +109,15 @@ type NASConfig struct {
 
 // AlertConfig defines an alert rule.
 type AlertConfig struct {
-	Name      string `yaml:"name"`
-	Condition string `yaml:"condition"`
-	Duration  string `yaml:"duration"`
-	Webhook   string `yaml:"webhook"`
+	Name      string  `yaml:"name"`
+	Condition string  `yaml:"condition"`
+	Target    string  `yaml:"target,omitempty"`
+	Metric    string  `yaml:"metric,omitempty"`
+	Threshold float64 `yaml:"threshold,omitempty"`
+	Duration  string  `yaml:"duration"`
+	Interval  string  `yaml:"interval,omitempty"`
+	Webhook   string  `yaml:"webhook,omitempty"`
+	Severity  string  `yaml:"severity,omitempty"`
 }
 
 // Load reads and parses a YAML config file.
@@ -174,6 +182,20 @@ func (c *Config) Validate() error {
 			return fmt.Errorf("defaults.scan_interval must be positive")
 		}
 		c.ScanInterval = d
+	}
+
+	// Parse alert interval (defaults to checker interval)
+	if c.Defaults.AlertInterval == "" {
+		c.AlertInterval = c.Interval
+	} else {
+		d, err := time.ParseDuration(c.Defaults.AlertInterval)
+		if err != nil {
+			return fmt.Errorf("defaults.alert_interval: invalid duration %q: %w", c.Defaults.AlertInterval, err)
+		}
+		if d <= 0 {
+			return fmt.Errorf("defaults.alert_interval must be positive")
+		}
+		c.AlertInterval = d
 	}
 
 	seen := make(map[string]bool)

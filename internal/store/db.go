@@ -58,6 +58,17 @@ CREATE TABLE IF NOT EXISTS findings_history (
 
 CREATE INDEX IF NOT EXISTS idx_history_target ON findings_history(target);
 CREATE INDEX IF NOT EXISTS idx_history_resolved ON findings_history(resolved_at);
+
+CREATE TABLE IF NOT EXISTS alert_events (
+	id        INTEGER PRIMARY KEY AUTOINCREMENT,
+	timestamp DATETIME NOT NULL,
+	rule_name TEXT NOT NULL,
+	target    TEXT NOT NULL,
+	message   TEXT,
+	severity  TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_alerts_timestamp ON alert_events(timestamp);
 `
 
 // Store wraps a SQLite database connection.
