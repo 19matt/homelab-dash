@@ -532,3 +532,141 @@ select {
     background: rgba(59, 130, 246, 0.15);
     color: var(--primary);
 }
+
+/* Sparkline uptime bars */
+.uptime-bar {
+    display: inline-block;
+    vertical-align: middle;
+    margin-left: 0.5rem;
+}
+
+.uptime-bar rect {
+    cursor: pointer;
+}
+
+.uptime-bar rect:hover {
+    opacity: 0.8;
+}
+
+/* Resource progress bars */
+.node-resources {
+    display: grid;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+}
+
+.resource-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+}
+
+.resource-name {
+    font-weight: 600;
+    min-width: 80px;
+    font-size: 0.9rem;
+}
+
+.resource-bars {
+    flex: 1;
+    display: grid;
+    gap: 0.25rem;
+}
+
+.resource-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.resource-label {
+    font-size: 0.7rem;
+    color: var(--muted);
+    min-width: 30px;
+    text-transform: uppercase;
+}
+
+.resource-track {
+    flex: 1;
+    height: 8px;
+    background: var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.resource-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.3s;
+}
+
+.resource-value {
+    font-size: 0.8rem;
+    min-width: 35px;
+    text-align: right;
+}
+
+/* Custom date range picker */
+.custom-range {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.custom-range input[type="datetime-local"] {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 0.35rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+}
+
+/* Mini chart row */
+.mini-chart-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.mini-chart {
+    height: 120px !important;
+}
+
+.mini-chart canvas {
+    max-height: 80px;
+}
+
+/* Breadcrumb */
+.breadcrumb {
+    font-size: 0.85rem;
+    color: var(--muted);
+    margin-bottom: 0.5rem;
+}
+
+.breadcrumb a {
+    color: var(--primary);
+    text-decoration: none;
+}
+
+.breadcrumb a:hover {
+    text-decoration: underline;
+}
+
+/* Text color utilities */
+.text-warn {
+    color: var(--warn) !important;
+}
+
+.text-fail {
+    color: var(--fail) !important;
+}
+
+.text-pass {
+    color: var(--pass) !important;
+}
