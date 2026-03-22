@@ -16,17 +16,23 @@ type AlertEvent struct {
 	Severity  string    `json:"severity"`
 }
 
-// SaveAlertEvent inserts an alert event into the database.
+// SaveAlertEvent inserts an alert event into the database with retry logic.
 func (s *Store) SaveAlertEvent(ctx context.Context, event AlertEvent) error {
-	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO alert_events (timestamp, rule_name, target, message, severity)
-		 VALUES (?, ?, ?, ?, ?)`,
-		event.Timestamp, event.RuleName, event.Target, event.Message, event.Severity,
-	)
-	if err != nil {
-		return fmt.Errorf("store: save alert event: %w", err)
+	for i := 0; i < 3; i++ {
+		_, err := s.db.ExecContext(ctx,
+			`INSERT INTO alert_events (timestamp, rule_name, target, message, severity)
+			 VALUES (?, ?, ?, ?, ?)`,
+			event.Timestamp, event.RuleName, event.Target, event.Message, event.Severity,
+		)
+		if err == nil {
+			return nil
+		}
+		// Retry on database locked
+		if i < 2 {
+			time.Sleep(100 * time.Millisecond)
+		}
 	}
-	return nil
+	return fmt.Errorf("store: save alert event after retries")
 }
 
 // GetAlertEvents returns alert events since the given time, up to limit.

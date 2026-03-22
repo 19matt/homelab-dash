@@ -25,6 +25,8 @@ func NewEvaluator(engine *Engine, s *store.Store) *Evaluator {
 
 // Evaluate fetches latest data from the store and runs alert evaluation.
 func (e *Evaluator) Evaluate() {
+	log.Println("alert eval: starting evaluation cycle")
+
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -34,6 +36,7 @@ func (e *Evaluator) Evaluate() {
 		log.Printf("alert eval: get check results: %v", err)
 		return
 	}
+	log.Printf("alert eval: fetched %d check results", len(results))
 
 	// Fetch current security findings
 	findings, err := e.store.GetFindings(ctx)
@@ -41,6 +44,7 @@ func (e *Evaluator) Evaluate() {
 		log.Printf("alert eval: get findings: %v", err)
 		return
 	}
+	log.Printf("alert eval: fetched %d findings", len(findings))
 
 	// Convert store findings to scanner findings for the engine
 	var scannerFindings []scanner.Finding
@@ -55,6 +59,12 @@ func (e *Evaluator) Evaluate() {
 
 	// Evaluate (points are fetched per-rule in the engine via store)
 	fired := e.engine.Evaluate(results, nil, scannerFindings)
+
+	if len(fired) > 0 {
+		log.Printf("alert eval: %d alerts fired", len(fired))
+	} else {
+		log.Println("alert eval: no alerts fired")
+	}
 
 	for _, alert := range fired {
 		log.Printf("alert: FIRED rule=%q target=%s message=%q", alert.Rule.Name, alert.Target, alert.Message)
