@@ -52,9 +52,24 @@ func (c *Client) get(ctx context.Context, path string, result interface{}) error
 
 // GetVersion returns the Frigate version string.
 func (c *Client) GetVersion(ctx context.Context) (string, error) {
-	var version string
-	err := c.get(ctx, "/api/version", &version)
-	return version, err
+	var raw json.RawMessage
+	err := c.get(ctx, "/api/version", &raw)
+	if err != nil {
+		return "", err
+	}
+
+	// Try string first, then number
+	var str string
+	if err := json.Unmarshal(raw, &str); err == nil {
+		return str, nil
+	}
+
+	var num float64
+	if err := json.Unmarshal(raw, &num); err == nil {
+		return fmt.Sprintf("%.2f", num), nil
+	}
+
+	return string(raw), nil
 }
 
 // GetStats returns system and camera statistics.

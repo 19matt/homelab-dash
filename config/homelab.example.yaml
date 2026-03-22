@@ -30,8 +30,11 @@ integrations:
     nodes: ["pve"]
   jellyfin:
     enabled: false
-    host: ""
-    api_key: ""
+    host: "http://192.168.1.30:8096"
+    api_key: "YOUR-API-KEY-HERE"
+  frigate:
+    enabled: false
+    host: "http://192.168.1.31:5000"
   nas:
     enabled: false
     smart_devices: []
