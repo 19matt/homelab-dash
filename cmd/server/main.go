@@ -16,7 +16,6 @@ import (
 	"github.com/homelab/homelab-dash/internal/scheduler"
 	"github.com/homelab/homelab-dash/internal/store"
 	"github.com/homelab/homelab-dash/internal/web"
-	"github.com/homelab/homelab-dash/internal/web/handlers"
 )
 
 func main() {
@@ -34,6 +33,9 @@ func main() {
 		log.Fatalf("failed to open database: %v", err)
 	}
 	defer s.Close()
+
+	// Create SSE hub
+	hub := web.NewHub()
 
 	// Register service checkers from config
 	sched := scheduler.New(s, cfg.Interval)
@@ -72,31 +74,20 @@ func main() {
 		log.Printf("proxmox integration enabled: nodes=%v", cfg.Integrations.Proxmox.Nodes)
 	}
 
-	// Build HTTP mux
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		fmt.Fprint(w, "homelab-dash ok")
+	// Wire broadcast to SSE hub
+	sched.SetBroadcastFunc(func(target, check, status string, latencyMs int64) {
+		hub.Broadcast(web.SSEEvent{
+			Target:    target,
+			Check:     check,
+			Status:    status,
+			LatencyMs: latencyMs,
+		})
 	})
 
-	// Status and uptime
-	mux.HandleFunc("GET /api/status", handlers.StatusHandler(s))
-	mux.HandleFunc("GET /api/uptime", handlers.UptimeHandler(s))
-
-	// Metrics
-	mux.HandleFunc("GET /api/metrics/latest", handlers.MetricsLatestHandler(s))
-	mux.HandleFunc("GET /api/metrics/history", handlers.MetricsHistoryHandler(s))
-	mux.HandleFunc("GET /api/metrics/targets", handlers.MetricsTargetsHandler(s))
-
-	// Proxmox VMs (all nodes, only if enabled)
-	if len(vmCollectors) > 0 {
-		mux.HandleFunc("GET /api/proxmox/vms", handlers.ProxmoxVMsHandlerMulti(vmCollectors))
-	}
-
-	// Wrap with auth if enabled (health stays public)
-	var handler http.Handler = mux
-	if cfg.Server.Auth.Enabled {
-		handler = web.BasicAuth(cfg.Server.Auth.Username, cfg.Server.Auth.Password, mux, "/health")
+	// Create web server with all routes
+	srv, err := web.NewServer(cfg.Server, s, hub, vmCollectors)
+	if err != nil {
+		log.Fatalf("failed to create web server: %v", err)
 	}
 
 	// Set up graceful shutdown
@@ -108,14 +99,14 @@ func main() {
 
 	// Start HTTP server
 	addr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
-	srv := &http.Server{
+	httpServer := &http.Server{
 		Addr:    addr,
-		Handler: handler,
+		Handler: srv.Handler,
 	}
 
 	go func() {
 		log.Printf("starting server on %s (interval: %s)", addr, cfg.Interval)
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("server error: %v", err)
 		}
 	}()
@@ -126,7 +117,7 @@ func main() {
 	shutdownCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	if err := srv.Shutdown(shutdownCtx); err != nil {
+	if err := httpServer.Shutdown(shutdownCtx); err != nil {
 		log.Fatalf("shutdown error: %v", err)
 	}
 

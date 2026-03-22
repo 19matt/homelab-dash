@@ -26,6 +26,7 @@ type Scheduler struct {
 	collectors []collectorEntry
 	store      *store.Store
 	interval   time.Duration
+	broadcast  func(target, check, status string, latencyMs int64)
 }
 
 // New creates a Scheduler with the given store and default interval.
@@ -54,6 +55,11 @@ func (sc *Scheduler) AddCollector(c collector.Collector) {
 // AddCollectorWithInterval registers a collector to run at a custom interval.
 func (sc *Scheduler) AddCollectorWithInterval(c collector.Collector, interval time.Duration) {
 	sc.collectors = append(sc.collectors, collectorEntry{collector: c, interval: interval})
+}
+
+// SetBroadcastFunc sets the function called after each checker result.
+func (sc *Scheduler) SetBroadcastFunc(fn func(target, check, status string, latencyMs int64)) {
+	sc.broadcast = fn
 }
 
 // Run starts goroutines for each registered checker and collector.
@@ -105,6 +111,10 @@ func (sc *Scheduler) executeChecker(ctx context.Context, c checker.Checker) {
 	}
 
 	log.Printf("checker %s: %s/%s = %s (%s)", c.Name(), result.Target, result.Check, result.Status, result.Latency)
+
+	if sc.broadcast != nil {
+		sc.broadcast(result.Target, result.Check, result.Status.String(), result.Latency.Milliseconds())
+	}
 }
 
 func (sc *Scheduler) runCollector(ctx context.Context, e collectorEntry, delay time.Duration) {
