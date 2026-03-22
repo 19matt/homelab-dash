@@ -124,7 +124,7 @@ func (s *Store) GetDailyUptime(ctx context.Context, target, check string, days i
 		`SELECT
 			strftime('%Y-%m-%d', timestamp) AS day,
 			COUNT(*) AS total,
-			COALESCE(SUM(CASE WHEN status = 0 THEN 1 ELSE 0 END), 0) AS passed
+			SUM(CASE WHEN status = 0 THEN 1 ELSE 0 END) AS passed
 		 FROM check_results
 		 WHERE target = ? AND check_name = ? AND timestamp > ?
 		 GROUP BY day
@@ -139,8 +139,14 @@ func (s *Store) GetDailyUptime(ctx context.Context, target, check string, days i
 	for rows.Next() {
 		var d DailyUptime
 		var total, passed int
-		if err := rows.Scan(&d.Date, &total, &passed); err != nil {
+		var dayPtr *string
+		if err := rows.Scan(&dayPtr, &total, &passed); err != nil {
 			return nil, fmt.Errorf("store: scan daily uptime: %w", err)
+		}
+		if dayPtr != nil {
+			d.Date = *dayPtr
+		} else {
+			continue
 		}
 		if total > 0 {
 			d.Percent = float64(passed) / float64(total) * 100
