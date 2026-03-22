@@ -69,6 +69,7 @@ type Endpoint struct {
 type IntegrationsConfig struct {
 	Proxmox  ProxmoxConfig  `yaml:"proxmox"`
 	Jellyfin JellyfinConfig `yaml:"jellyfin"`
+	Frigate  FrigateConfig  `yaml:"frigate"`
 	NAS      NASConfig      `yaml:"nas"`
 }
 
@@ -99,6 +100,12 @@ type JellyfinConfig struct {
 	Enabled bool   `yaml:"enabled"`
 	Host    string `yaml:"host"`
 	APIKey  string `yaml:"api_key"`
+}
+
+// FrigateConfig holds Frigate NVR connection settings.
+type FrigateConfig struct {
+	Enabled bool   `yaml:"enabled"`
+	Host    string `yaml:"host"`
 }
 
 // NASConfig holds NAS monitoring settings.
@@ -235,6 +242,9 @@ func (c *Config) Validate() error {
 	}
 	if c.Integrations.Jellyfin.Enabled && c.Integrations.Jellyfin.Host == "" {
 		return fmt.Errorf("integrations.jellyfin.host is required when enabled")
+	}
+	if c.Integrations.Frigate.Enabled && c.Integrations.Frigate.Host == "" {
+		return fmt.Errorf("integrations.frigate.host is required when enabled")
 	}
 
 	return nil
