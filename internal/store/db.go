@@ -28,8 +28,13 @@ CREATE TABLE IF NOT EXISTS data_points (
 );
 `
 
+// Store wraps a SQLite database connection.
+type Store struct {
+	db *sql.DB
+}
+
 // Open opens a SQLite database at the given path and runs migrations.
-func Open(path string) (*sql.DB, error) {
+func Open(path string) (*Store, error) {
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
 		return nil, fmt.Errorf("store: open %s: %w", path, err)
@@ -50,5 +55,15 @@ func Open(path string) (*sql.DB, error) {
 		return nil, fmt.Errorf("store: run migrations: %w", err)
 	}
 
-	return db, nil
+	return &Store{db: db}, nil
+}
+
+// Close closes the underlying database connection.
+func (s *Store) Close() error {
+	return s.db.Close()
+}
+
+// DB returns the underlying *sql.DB for direct access if needed.
+func (s *Store) DB() *sql.DB {
+	return s.db
 }
