@@ -1,0 +1,16 @@
+[Unit]
+Description=homelab-dash monitoring dashboard
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+ExecStart=/opt/homelab-dash/homelab-dash --config /etc/homelab-dash/homelab.yaml --db /var/lib/homelab-dash/homelab.db
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=homelab-dash
+
+[Install]
+WantedBy=multi-user.target

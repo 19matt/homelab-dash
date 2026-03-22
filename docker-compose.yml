@@ -1,9 +1,41 @@
 services:
   homelab-dash:
-    build: .
+    build:
+      context: .
+      args:
+        VERSION: "${VERSION:-v0.1.0}"
+        BUILD_TIME: "${BUILD_TIME:-unknown}"
     ports:
-      - "8080:8080"
+      - "${PORT:-8080}:8080"
     volumes:
-      - ./config/homelab.yaml:/config/homelab.yaml:ro
-      - ./data:/data
+      - ./config:/config:ro
+      - homelab_data:/data
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # Optional: S.M.A.R.T. monitoring (requires privileged access)
+  # Usage: docker compose --profile smart up -d
+  homelab-smart:
+    build:
+      context: .
+      args:
+        VERSION: "${VERSION:-v0.1.0}"
+        BUILD_TIME: "${BUILD_TIME:-unknown}"
+    profiles: ["smart"]
+    privileged: true
+    devices:
+      - /dev/sda:/dev/sda
+      - /dev/sdb:/dev/sdb
+    volumes:
+      - ./config:/config:ro
+      - homelab_data:/data
+    command: ["--config", "/config/homelab.yaml", "--db", "/data/homelab.db"]
+    restart: unless-stopped
+
+volumes:
+  homelab_data:
