@@ -19,25 +19,15 @@ func MetricsLatestHandler(s *store.Store) http.HandlerFunc {
 			return
 		}
 
-		// We don't know which metrics exist, so we get from common ones.
-		// For a more complete solution, we'd need a "get all metrics for target" query.
-		// For now, return the latest data points for known metric prefixes.
-		metrics := []string{
-			"node.cpu.percent", "node.mem.used", "node.mem.total", "node.mem.percent",
-			"node.uptime", "node.load1", "node.load5", "node.load15",
-			"vm.cpu.percent", "vm.mem.used", "vm.mem.total", "vm.mem.percent",
-			"vm.disk.used", "vm.disk.total", "vm.netin", "vm.netout",
+		// Single query to get all latest metrics for this target
+		result, err := s.GetAllLatestDataPoints(r.Context(), target)
+		if err != nil {
+			apiError(w, err, "Failed to load metrics", http.StatusInternalServerError)
+			return
 		}
 
-		result := make(map[string]float64)
-		for _, metric := range metrics {
-			dp, err := s.GetLatestDataPoint(r.Context(), target, metric)
-			if err != nil {
-				continue
-			}
-			if dp != nil {
-				result[metric] = dp.Value
-			}
+		if result == nil {
+			result = make(map[string]float64)
 		}
 
 		w.Header().Set("Content-Type", "application/json")

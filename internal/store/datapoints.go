@@ -122,3 +122,29 @@ func (s *Store) GetAllTargetsWithMetric(ctx context.Context, metric string) ([]s
 	}
 	return targets, rows.Err()
 }
+
+// GetAllLatestDataPoints returns the latest value for every metric on a target.
+func (s *Store) GetAllLatestDataPoints(ctx context.Context, target string) (map[string]float64, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT metric, value
+		 FROM data_points
+		 WHERE target = ?
+		 GROUP BY metric
+		 HAVING timestamp = MAX(timestamp)`,
+		target)
+	if err != nil {
+		return nil, fmt.Errorf("store: get all latest data points: %w", err)
+	}
+	defer rows.Close()
+
+	result := make(map[string]float64)
+	for rows.Next() {
+		var metric string
+		var value float64
+		if err := rows.Scan(&metric, &value); err != nil {
+			return nil, fmt.Errorf("store: scan data point: %w", err)
+		}
+		result[metric] = value
+	}
+	return result, rows.Err()
+}
