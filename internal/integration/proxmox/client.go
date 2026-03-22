@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/homelab/homelab-dash/internal/config"
 )
@@ -138,11 +137,4 @@ func (c *Client) GetVMRRD(ctx context.Context, node string, vmid int, vmtype, ti
 // ActiveHosts returns the list of configured hosts.
 func (c *Client) ActiveHosts() []string {
 	return c.hosts
-}
-
-// isConnRefused checks if the error is a connection refused error.
-func isConnRefused(err error) bool {
-	return strings.Contains(err.Error(), "connection refused") ||
-		strings.Contains(err.Error(), "no such host") ||
-		strings.Contains(err.Error(), "connect: connection refused")
 }
