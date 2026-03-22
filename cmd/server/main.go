@@ -8,9 +8,11 @@ import (
 	"net/http"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/homelab/homelab-dash/internal/checker"
 	"github.com/homelab/homelab-dash/internal/config"
+	"github.com/homelab/homelab-dash/internal/integration/proxmox"
 	"github.com/homelab/homelab-dash/internal/scheduler"
 	"github.com/homelab/homelab-dash/internal/store"
 	"github.com/homelab/homelab-dash/internal/web"
@@ -33,7 +35,7 @@ func main() {
 	}
 	defer s.Close()
 
-	// Register checkers from config
+	// Register service checkers from config
 	sched := scheduler.New(s, cfg.Interval)
 	for _, t := range cfg.Targets {
 		for _, check := range t.Checks {
@@ -52,14 +54,42 @@ func main() {
 		}
 	}
 
+	// Optional: Proxmox integration
+	var vmCollector *proxmox.VMCollector
+	if cfg.Integrations.Proxmox.Enabled {
+		pveClient := proxmox.NewClient(cfg.Integrations.Proxmox)
+		node := cfg.Integrations.Proxmox.Node
+
+		sched.AddCollectorWithInterval(proxmox.NewNodeCollector(pveClient, node), 30*time.Second)
+
+		vmCollector = proxmox.NewVMCollector(pveClient, node)
+		sched.AddCollectorWithInterval(vmCollector, 30*time.Second)
+
+		sched.AddCheckerWithInterval(proxmox.NewVMChecker(pveClient, node), cfg.Interval)
+
+		log.Printf("proxmox integration enabled: node=%s", node)
+	}
+
 	// Build HTTP mux
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprint(w, "homelab-dash ok")
 	})
+
+	// Status and uptime
 	mux.HandleFunc("GET /api/status", handlers.StatusHandler(s))
 	mux.HandleFunc("GET /api/uptime", handlers.UptimeHandler(s))
+
+	// Metrics
+	mux.HandleFunc("GET /api/metrics/latest", handlers.MetricsLatestHandler(s))
+	mux.HandleFunc("GET /api/metrics/history", handlers.MetricsHistoryHandler(s))
+	mux.HandleFunc("GET /api/metrics/targets", handlers.MetricsTargetsHandler(s))
+
+	// Proxmox VMs (only if enabled)
+	if vmCollector != nil {
+		mux.HandleFunc("GET /api/proxmox/vms", handlers.ProxmoxVMsHandler(vmCollector))
+	}
 
 	// Wrap with auth if enabled (health stays public)
 	var handler http.Handler = mux
