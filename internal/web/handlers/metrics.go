@@ -137,6 +137,19 @@ func ProxmoxVMsHandler(vmCollector *proxmox.VMCollector) http.HandlerFunc {
 	}
 }
 
+// ProxmoxVMsHandlerMulti returns VMs from all node collectors combined.
+func ProxmoxVMsHandlerMulti(vmCollectors []*proxmox.VMCollector) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var allVMs []proxmox.VMSummary
+		for _, c := range vmCollectors {
+			allVMs = append(allVMs, c.LatestVMs()...)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(allVMs)
+	}
+}
+
 // parseWindow converts window strings like "1h", "6h", "24h", "7d" to durations.
 func parseWindow(s string) (time.Duration, error) {
 	switch s {

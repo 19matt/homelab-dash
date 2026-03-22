@@ -54,20 +54,22 @@ func main() {
 		}
 	}
 
-	// Optional: Proxmox integration
-	var vmCollector *proxmox.VMCollector
+	// Optional: Proxmox integration (multi-node)
+	var vmCollectors []*proxmox.VMCollector
 	if cfg.Integrations.Proxmox.Enabled {
 		pveClient := proxmox.NewClient(cfg.Integrations.Proxmox)
-		node := cfg.Integrations.Proxmox.Node
 
-		sched.AddCollectorWithInterval(proxmox.NewNodeCollector(pveClient, node), 30*time.Second)
+		for _, node := range cfg.Integrations.Proxmox.Nodes {
+			sched.AddCollectorWithInterval(proxmox.NewNodeCollector(pveClient, node), 30*time.Second)
 
-		vmCollector = proxmox.NewVMCollector(pveClient, node)
-		sched.AddCollectorWithInterval(vmCollector, 30*time.Second)
+			vmCollector := proxmox.NewVMCollector(pveClient, node)
+			vmCollectors = append(vmCollectors, vmCollector)
+			sched.AddCollectorWithInterval(vmCollector, 30*time.Second)
 
-		sched.AddCheckerWithInterval(proxmox.NewVMChecker(pveClient, node), cfg.Interval)
+			sched.AddCheckerWithInterval(proxmox.NewVMChecker(pveClient, node), cfg.Interval)
+		}
 
-		log.Printf("proxmox integration enabled: node=%s", node)
+		log.Printf("proxmox integration enabled: nodes=%v", cfg.Integrations.Proxmox.Nodes)
 	}
 
 	// Build HTTP mux
@@ -86,9 +88,9 @@ func main() {
 	mux.HandleFunc("GET /api/metrics/history", handlers.MetricsHistoryHandler(s))
 	mux.HandleFunc("GET /api/metrics/targets", handlers.MetricsTargetsHandler(s))
 
-	// Proxmox VMs (only if enabled)
-	if vmCollector != nil {
-		mux.HandleFunc("GET /api/proxmox/vms", handlers.ProxmoxVMsHandler(vmCollector))
+	// Proxmox VMs (all nodes, only if enabled)
+	if len(vmCollectors) > 0 {
+		mux.HandleFunc("GET /api/proxmox/vms", handlers.ProxmoxVMsHandlerMulti(vmCollectors))
 	}
 
 	// Wrap with auth if enabled (health stays public)

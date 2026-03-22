@@ -6,13 +6,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/homelab/homelab-dash/internal/config"
 )
 
-// Client is a thin HTTP client for the Proxmox REST API.
+// Client is a thin HTTP client for the Proxmox REST API with host fallback.
 type Client struct {
-	host        string
+	hosts       []string
 	tokenID     string
 	tokenSecret string
 	httpClient  *http.Client
@@ -28,7 +29,7 @@ func NewClient(cfg config.ProxmoxConfig) *Client {
 	}
 
 	return &Client{
-		host:        cfg.Host,
+		hosts:       cfg.AllHosts(),
 		tokenID:     cfg.TokenID,
 		tokenSecret: cfg.TokenSecret,
 		httpClient: &http.Client{
@@ -37,34 +38,49 @@ func NewClient(cfg config.ProxmoxConfig) *Client {
 	}
 }
 
-// get performs an authenticated GET request and decodes the data field into result.
+// get performs an authenticated GET request, trying each host until one succeeds.
 func (c *Client) get(ctx context.Context, path string, result interface{}) error {
-	url := c.host + "/api2/json" + path
+	var lastErr error
+
+	for _, host := range c.hosts {
+		err := c.tryHost(ctx, host, path, result)
+		if err == nil {
+			return nil
+		}
+		lastErr = err
+	}
+
+	return fmt.Errorf("proxmox: all hosts failed for %s: %w", path, lastErr)
+}
+
+// tryHost attempts a request against a single host.
+func (c *Client) tryHost(ctx context.Context, host, path string, result interface{}) error {
+	url := host + "/api2/json" + path
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return fmt.Errorf("proxmox: create request: %w", err)
+		return fmt.Errorf("create request: %w", err)
 	}
 
 	req.Header.Set("Authorization", fmt.Sprintf("PVEAPIToken=%s=%s", c.tokenID, c.tokenSecret))
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("proxmox: request %s: %w", path, err)
+		return fmt.Errorf("request to %s: %w", host, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("proxmox: request %s: status %d", path, resp.StatusCode)
+		return fmt.Errorf("request to %s: status %d", host, resp.StatusCode)
 	}
 
 	var wrapper proxmoxResponse
 	if err := json.NewDecoder(resp.Body).Decode(&wrapper); err != nil {
-		return fmt.Errorf("proxmox: decode response: %w", err)
+		return fmt.Errorf("decode response from %s: %w", host, err)
 	}
 
 	if err := json.Unmarshal(wrapper.Data, result); err != nil {
-		return fmt.Errorf("proxmox: unmarshal data: %w", err)
+		return fmt.Errorf("unmarshal data from %s: %w", host, err)
 	}
 
 	return nil
@@ -117,4 +133,16 @@ func (c *Client) GetVMRRD(ctx context.Context, node string, vmid int, vmtype, ti
 	var entries []RRDEntry
 	err := c.get(ctx, fmt.Sprintf("/nodes/%s/%s/%d/rrddata?timeframe=%s&cf=AVERAGE", node, vmtype, vmid, timeframe), &entries)
 	return entries, err
+}
+
+// ActiveHosts returns the list of configured hosts.
+func (c *Client) ActiveHosts() []string {
+	return c.hosts
+}
+
+// isConnRefused checks if the error is a connection refused error.
+func isConnRefused(err error) bool {
+	return strings.Contains(err.Error(), "connection refused") ||
+		strings.Contains(err.Error(), "no such host") ||
+		strings.Contains(err.Error(), "connect: connection refused")
 }

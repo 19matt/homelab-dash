@@ -68,12 +68,24 @@ type IntegrationsConfig struct {
 
 // ProxmoxConfig holds Proxmox API connection settings.
 type ProxmoxConfig struct {
-	Enabled     bool   `yaml:"enabled"`
-	Host        string `yaml:"host"`
-	TokenID     string `yaml:"token_id"`
-	TokenSecret string `yaml:"token_secret"`
-	InsecureTLS bool   `yaml:"insecure_tls"`
-	Node        string `yaml:"node"`
+	Enabled     bool     `yaml:"enabled"`
+	Host        string   `yaml:"host,omitempty"`  // single host (legacy)
+	Hosts       []string `yaml:"hosts,omitempty"` // multiple hosts for redundancy
+	TokenID     string   `yaml:"token_id"`
+	TokenSecret string   `yaml:"token_secret"`
+	InsecureTLS bool     `yaml:"insecure_tls"`
+	Nodes       []string `yaml:"nodes"`
+}
+
+// AllHosts returns the list of hosts to try, merging Host and Hosts.
+func (c ProxmoxConfig) AllHosts() []string {
+	if len(c.Hosts) > 0 {
+		return c.Hosts
+	}
+	if c.Host != "" {
+		return []string{c.Host}
+	}
+	return nil
 }
 
 // JellyfinConfig holds Jellyfin API connection settings.
@@ -169,11 +181,11 @@ func (c *Config) Validate() error {
 	}
 
 	if c.Integrations.Proxmox.Enabled {
-		if c.Integrations.Proxmox.Host == "" {
-			return fmt.Errorf("integrations.proxmox.host is required when enabled")
+		if len(c.Integrations.Proxmox.AllHosts()) == 0 {
+			return fmt.Errorf("integrations.proxmox.host or hosts is required when enabled")
 		}
-		if c.Integrations.Proxmox.Node == "" {
-			return fmt.Errorf("integrations.proxmox.node is required when enabled")
+		if len(c.Integrations.Proxmox.Nodes) == 0 {
+			return fmt.Errorf("integrations.proxmox.nodes is required when enabled")
 		}
 		if c.Integrations.Proxmox.TokenID == "" {
 			return fmt.Errorf("integrations.proxmox.token_id is required when enabled")
