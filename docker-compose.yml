@@ -1,0 +1,9 @@
+services:
+  homelab-dash:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./config/homelab.yaml:/config/homelab.yaml:ro
+      - ./data:/data
+    restart: unless-stopped
