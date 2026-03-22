@@ -35,11 +35,29 @@ CREATE TABLE IF NOT EXISTS findings (
 	title TEXT NOT NULL,
 	description TEXT,
 	severity INTEGER NOT NULL,
-	remediation TEXT
+	remediation TEXT,
+	scan_id TEXT NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_findings_target ON findings(target);
 CREATE INDEX IF NOT EXISTS idx_findings_severity ON findings(severity);
+CREATE INDEX IF NOT EXISTS idx_findings_scan_id ON findings(scan_id);
+
+CREATE TABLE IF NOT EXISTS findings_history (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	first_seen DATETIME NOT NULL,
+	last_seen DATETIME NOT NULL,
+	resolved_at DATETIME,
+	target TEXT NOT NULL,
+	scanner TEXT NOT NULL,
+	title TEXT NOT NULL,
+	description TEXT,
+	severity INTEGER NOT NULL,
+	remediation TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_history_target ON findings_history(target);
+CREATE INDEX IF NOT EXISTS idx_history_resolved ON findings_history(resolved_at);
 `
 
 // Store wraps a SQLite database connection.

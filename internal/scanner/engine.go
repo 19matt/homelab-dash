@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"time"
 
 	"github.com/homelab/homelab-dash/internal/config"
 	"github.com/homelab/homelab-dash/internal/store"
@@ -31,7 +32,10 @@ func (e *ScanEngine) AddScanner(sc Scanner) {
 }
 
 // RunAll runs all scanners against all targets concurrently and saves findings.
+// Previous findings are cleared and tracked in history.
 func (e *ScanEngine) RunAll(ctx context.Context) ([]Finding, error) {
+	scanID := time.Now().Format("20060102-150405")
+
 	var mu sync.Mutex
 	var allFindings []Finding
 
@@ -56,26 +60,27 @@ func (e *ScanEngine) RunAll(ctx context.Context) ([]Finding, error) {
 	}
 	wg.Wait()
 
-	// Convert to store findings and save
-	if len(allFindings) > 0 {
-		storeFindings := make([]store.Finding, len(allFindings))
-		for i, f := range allFindings {
-			storeFindings[i] = store.Finding{
-				Timestamp:   f.Timestamp,
-				Target:      f.Target,
-				Scanner:     f.Scanner,
-				Title:       f.Title,
-				Description: f.Description,
-				Severity:    int(f.Severity),
-				Remediation: f.Remediation,
-			}
-		}
-		if err := e.store.SaveFindings(ctx, storeFindings); err != nil {
-			return allFindings, fmt.Errorf("scan engine: save findings: %w", err)
+	// Convert to store findings with scan ID
+	storeFindings := make([]store.Finding, len(allFindings))
+	for i, f := range allFindings {
+		storeFindings[i] = store.Finding{
+			Timestamp:   f.Timestamp,
+			Target:      f.Target,
+			Scanner:     f.Scanner,
+			Title:       f.Title,
+			Description: f.Description,
+			Severity:    int(f.Severity),
+			Remediation: f.Remediation,
+			ScanID:      scanID,
 		}
 	}
 
-	log.Printf("scan engine: completed, found %d findings across %d targets", len(allFindings), len(e.targets))
+	// Save findings (clears old ones, tracks history)
+	if err := e.store.SaveFindings(ctx, storeFindings); err != nil {
+		return allFindings, fmt.Errorf("scan engine: save findings: %w", err)
+	}
+
+	log.Printf("scan engine: completed scan %s, found %d findings across %d targets", scanID, len(allFindings), len(e.targets))
 	return allFindings, nil
 }
 
