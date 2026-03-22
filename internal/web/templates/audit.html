@@ -1,0 +1,70 @@
+{{ define "audit-content" }}
+<h1>Audit Log</h1>
+
+<div class="filter-bar">
+    <div class="time-range">
+        <button onclick="filterAudit('all')" class="{{ if eq .EventType "" }}active{{ end }}">All</button>
+        <button onclick="filterAudit('check.fail')" class="{{ if eq .EventType "check.fail" }}active{{ end }}">Check Failures</button>
+        <button onclick="filterAudit('check.recover')" class="{{ if eq .EventType "check.recover" }}active{{ end }}">Recoveries</button>
+        <button onclick="filterAudit('scan.complete')" class="{{ if eq .EventType "scan.complete" }}active{{ end }}">Scans</button>
+        <button onclick="filterAudit('alert.fired')" class="{{ if eq .EventType "alert.fired" }}active{{ end }}">Alerts</button>
+        <button onclick="filterAudit('config.change')" class="{{ if eq .EventType "config.change" }}active{{ end }}">Config</button>
+    </div>
+    <div class="filter-group">
+        <span class="muted">{{ .TotalCount }} events</span>
+    </div>
+</div>
+
+{{ if .Events }}
+<table>
+    <thead>
+        <tr>
+            <th>When</th>
+            <th>Type</th>
+            <th>Target</th>
+            <th>Message</th>
+        </tr>
+    </thead>
+    <tbody>
+        {{ range .Events }}
+        <tr>
+            <td class="mono">{{ .Timestamp.Format "Jan 02 15:04:05" }}</td>
+            <td><span class="badge audit-type-{{ .Type }}">{{ .Type }}</span></td>
+            <td>{{ .Target }}</td>
+            <td>{{ .Message }}</td>
+        </tr>
+        {{ end }}
+    </tbody>
+</table>
+
+{{ if gt .TotalCount 50 }}
+<div style="margin-top: 1rem; text-align: center;">
+    {{ if gt .Page 1 }}
+    <a href="/audit?page={{ sub .Page 1 }}&type={{ .EventType }}" class="btn-small">← Previous</a>
+    {{ end }}
+    <span class="muted" style="margin: 0 1rem;">Page {{ .Page }}</span>
+    <a href="/audit?page={{ add .Page 1 }}&type={{ .EventType }}" class="btn-small">Next →</a>
+</div>
+{{ end }}
+{{ else }}
+<div class="card empty-state" style="text-align:center;padding:3rem;">
+    <p class="muted">No audit events yet</p>
+    <p class="muted" style="margin-top:0.5rem;">Events are recorded when checks fail, alerts fire, or configuration changes</p>
+</div>
+{{ end }}
+
+<script>
+function filterAudit(type) {
+    window.location.href = '/audit?type=' + type;
+}
+</script>
+
+<style>
+.audit-type-check\.fail { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
+.audit-type-check\.recover { background: rgba(34, 197, 94, 0.15); color: #22c55e; }
+.audit-type-scan\.complete { background: rgba(59, 130, 246, 0.15); color: #3b82f6; }
+.audit-type-alert\.fired { background: rgba(245, 158, 11, 0.15); color: #f59e0b; }
+.audit-type-config\.change { background: rgba(139, 92, 246, 0.15); color: #8b5cf6; }
+.audit-type-startup { background: rgba(100, 116, 139, 0.15); color: #64748b; }
+</style>
+{{ end }}

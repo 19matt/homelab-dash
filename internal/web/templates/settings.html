@@ -1,0 +1,141 @@
+{{ define "settings-content" }}
+<h1>Settings</h1>
+
+<h2>Add Target</h2>
+<div class="card" style="margin-bottom: 1.5rem;">
+    <form id="add-target-form" onsubmit="addTarget(event)">
+        <div class="filter-bar">
+            <div class="filter-group">
+                <label class="filter-label">Name</label>
+                <input type="text" id="target-name" placeholder="My Service" required>
+            </div>
+            <div class="filter-group">
+                <label class="filter-label">Host / IP</label>
+                <input type="text" id="target-host" placeholder="192.168.1.100" required>
+            </div>
+            <div class="filter-group">
+                <label class="filter-label">Ports</label>
+                <input type="text" id="target-ports" placeholder="8080, 443">
+            </div>
+        </div>
+        <div style="margin: 0.75rem 0;">
+            <label><input type="checkbox" id="check-ping" checked> Ping</label>
+            <label style="margin-left: 1rem;"><input type="checkbox" id="check-http" checked> HTTP</label>
+        </div>
+        <div style="display: flex; gap: 0.5rem;">
+            <button type="submit" class="btn">Add Target</button>
+            <button type="button" class="btn-small" onclick="testNewTarget()">Test Connection</button>
+        </div>
+        <div id="test-result" style="margin-top: 0.5rem;"></div>
+    </form>
+</div>
+
+<h2>Current Targets</h2>
+{{ if .Targets }}
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Host</th>
+            <th>Checks</th>
+            <th>Ports</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {{ range .Targets }}
+        <tr>
+            <td>{{ .Name }}</td>
+            <td class="mono">{{ .Host }}</td>
+            <td>{{ range .Checks }}<span class="badge badge-unknown">{{ . }}</span> {{ end }}</td>
+            <td class="mono">{{ range .Ports }}{{ . }} {{ end }}</td>
+            <td>
+                <button class="btn-small" onclick="removeTarget('{{ .Name }}')">Remove</button>
+                <button class="btn-small" onclick="testTarget('{{ .Host }}', '{{ range .Checks }}{{ . }},{{ end }}')">Test</button>
+            </td>
+        </tr>
+        {{ end }}
+    </tbody>
+</table>
+{{ else }}
+<div class="card empty-state">
+    <p class="muted">No targets configured. Add one above.</p>
+</div>
+{{ end }}
+
+<h2>Configuration</h2>
+<div class="card">
+    <pre class="mono" style="font-size: 0.8rem; overflow-x: auto;">server:
+  host: {{ .Config.Server.Host }}
+  port: {{ .Config.Server.Port }}
+  auth:
+    enabled: {{ .Config.Server.Auth.Enabled }}
+    username: {{ .Config.Server.Auth.Username }}
+    password: ••••••
+defaults:
+  interval: {{ .Config.Defaults.Interval }}
+  scan_interval: {{ .Config.Defaults.ScanInterval }}
+  alert_interval: {{ .Config.Defaults.AlertInterval }}</pre>
+</div>
+
+<script>
+function addTarget(e) {
+    e.preventDefault();
+    var ports = document.getElementById('target-ports').value.split(',').map(function(p) { return parseInt(p.trim()); }).filter(function(p) { return !isNaN(p); });
+    var checks = [];
+    if (document.getElementById('check-ping').checked) checks.push('ping');
+    if (document.getElementById('check-http').checked) checks.push('http');
+
+    fetch('/api/targets', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            name: document.getElementById('target-name').value,
+            host: document.getElementById('target-host').value,
+            checks: checks,
+            ports: ports
+        })
+    }).then(function(r) {
+        if (r.ok) location.reload();
+        else r.text().then(function(t) { alert('Error: ' + t); });
+    });
+}
+
+function removeTarget(name) {
+    if (!confirm('Remove target "' + name + '"?')) return;
+    fetch('/api/targets/' + name, {method: 'DELETE'}).then(function(r) {
+        if (r.ok) location.reload();
+    });
+}
+
+function testTarget(host, checksStr) {
+    var checks = checksStr.split(',').filter(function(c) { return c; });
+    fetch('/api/targets/test', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({host: host, checks: checks, port: 80})
+    }).then(function(r) { return r.json(); }).then(function(data) {
+        var el = document.getElementById('test-result');
+        el.innerHTML = '<span class="badge badge-' + (data.ping === 'pass' && data.http === 'pass' ? 'pass' : 'fail') + '">' + JSON.stringify(data) + '</span>';
+    });
+}
+
+function testNewTarget() {
+    testTarget(document.getElementById('target-host').value, 'ping,http');
+}
+</script>
+
+<style>
+input[type="text"] {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 0.5rem 0.75rem;
+    border-radius: 4px;
+    font-size: 0.9rem;
+}
+input[type="checkbox"] {
+    margin-right: 0.25rem;
+}
+</style>
+{{ end }}

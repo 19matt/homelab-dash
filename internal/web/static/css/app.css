@@ -1,4 +1,4 @@
-:root {
+:root, [data-theme="dark"] {
     --bg: #0f1117;
     --surface: #1a1d27;
     --surface-hover: #22252f;
@@ -12,6 +12,20 @@
     --primary: #3b82f6;
     --font-mono: 'JetBrains Mono', monospace;
     --nav-width: 220px;
+}
+
+[data-theme="light"] {
+    --bg: #f8fafc;
+    --surface: #ffffff;
+    --surface-hover: #f1f5f9;
+    --border: #e2e8f0;
+    --text: #1e293b;
+    --muted: #64748b;
+    --pass: #16a34a;
+    --warn: #d97706;
+    --fail: #dc2626;
+    --unknown: #94a3b8;
+    --primary: #2563eb;
 }
 
 * {
@@ -669,4 +683,69 @@ select {
 
 .text-pass {
     color: var(--pass) !important;
+}
+
+/* Theme toggle */
+.theme-toggle {
+    background: none;
+    border: none;
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 0.25rem;
+    opacity: 0.7;
+    transition: opacity 0.15s;
+}
+
+.theme-toggle:hover {
+    opacity: 1;
+}
+
+/* Empty states */
+.empty-state {
+    text-align: center;
+    padding: 3rem;
+}
+
+.empty-state h3 {
+    font-size: 1.1rem;
+    margin-bottom: 0.5rem;
+}
+
+.empty-state pre {
+    background: var(--bg);
+    padding: 1rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    text-align: left;
+    margin-top: 1rem;
+    overflow-x: auto;
+}
+
+/* Settings form */
+input[type="text"],
+input[type="number"] {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 0.5rem 0.75rem;
+    border-radius: 4px;
+    font-size: 0.9rem;
+}
+
+input[type="checkbox"] {
+    margin-right: 0.25rem;
+}
+
+label {
+    font-size: 0.9rem;
+    color: var(--text);
+}
+
+select {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 0.5rem 0.75rem;
+    border-radius: 4px;
+    font-size: 0.9rem;
 }

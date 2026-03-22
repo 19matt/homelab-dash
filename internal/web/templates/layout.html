@@ -5,6 +5,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>homelab-dash</title>
+    <script>
+        (function() {
+            var theme = localStorage.getItem('theme') || 'dark';
+            document.documentElement.setAttribute('data-theme', theme);
+        })();
+    </script>
     <link rel="stylesheet" href="/static/css/app.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -26,11 +32,14 @@
             Security <span id="nav-findings-badge" class="badge" hx-get="/fragments/findings-badge" hx-trigger="load" hx-swap="innerHTML">-</span>
         </a>
         <a href="/alerts" class="nav-link {{ if eq .ActivePage "alerts" }}active{{ end }}">Alerts</a>
+        <a href="/audit" class="nav-link {{ if eq .ActivePage "audit" }}active{{ end }}">Audit</a>
+        <a href="/settings" class="nav-link {{ if eq .ActivePage "settings" }}active{{ end }}">Settings</a>
     </nav>
     <main class="main">
         <header class="topbar">
             <div></div>
             <div class="topbar-right">
+                <button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme">🌓</button>
                 <span class="muted">Last updated: <span id="last-updated">-</span></span>
             </div>
         </header>

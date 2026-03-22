@@ -64,6 +64,8 @@ var TemplateFuncMap = template.FuncMap{
 		return formatUptime(int64(seconds))
 	},
 	"toInt": func(v int) int { return v },
+	"add":   func(a, b int) int { return a + b },
+	"sub":   func(a, b int) int { return a - b },
 }
 
 // renderTemplate executes a named template and returns the HTML.

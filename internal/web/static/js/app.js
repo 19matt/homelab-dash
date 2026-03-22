@@ -1,3 +1,11 @@
+// Theme toggle
+function toggleTheme() {
+    var current = document.documentElement.getAttribute('data-theme');
+    var next = current === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('theme', next);
+}
+
 // SSE connection with auto-reconnect
 function connectSSE() {
     const es = new EventSource('/events');
