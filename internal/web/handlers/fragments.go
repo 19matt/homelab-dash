@@ -14,7 +14,11 @@ import (
 // StatusGridFragment returns the service status cards for htmx refresh.
 func StatusGridFragment(tmpl *template.Template, s *store.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		results, _ := s.GetLatestCheckResults(r.Context())
+		results, err := s.GetLatestCheckResults(r.Context())
+		if err != nil {
+			fragmentError(w, err, "Failed to load status")
+			return
+		}
 
 		w.Header().Set("Content-Type", "text/html")
 		tmpl.ExecuteTemplate(w, "fragment-status-grid", struct {
@@ -63,7 +67,11 @@ func VMTableFragment(tmpl *template.Template, vmCollectors []*proxmox.VMCollecto
 // FindingsBadgeFragment returns the findings count badge for the nav.
 func FindingsBadgeFragment(s *store.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		summary, _ := s.GetFindingsSummary(r.Context())
+		summary, err := s.GetFindingsSummary(r.Context())
+		if err != nil {
+			fragmentError(w, err, "Failed to load findings")
+			return
+		}
 
 		critical := summary["critical"] + summary["high"]
 
@@ -90,6 +98,11 @@ func JellyfinSummaryFragment(client *jellyfin.Client) http.HandlerFunc {
 		ctx := r.Context()
 
 		info, infoErr := client.GetSystemInfo(ctx)
+		if infoErr != nil {
+			fragmentError(w, infoErr, "Jellyfin unreachable")
+			return
+		}
+
 		sessions, _ := client.GetSessions(ctx)
 		counts, _ := client.GetItemCounts(ctx)
 
@@ -128,6 +141,11 @@ func FrigateSummaryFragment(client *frigate.Client) http.HandlerFunc {
 		ctx := r.Context()
 
 		version, versionErr := client.GetVersion(ctx)
+		if versionErr != nil {
+			fragmentError(w, versionErr, "Frigate unreachable")
+			return
+		}
+
 		stats, _ := client.GetStats(ctx)
 
 		w.Header().Set("Content-Type", "text/html")

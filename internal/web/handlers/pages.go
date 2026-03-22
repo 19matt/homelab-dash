@@ -3,6 +3,7 @@ package handlers
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"log"
@@ -102,6 +103,21 @@ func renderOrError(w http.ResponseWriter, tmpl *template.Template, name string, 
 		return "", false
 	}
 	return content, true
+}
+
+// fragmentError logs an error and returns an empty HTML response for htmx fragments.
+func fragmentError(w http.ResponseWriter, err error, msg string) {
+	log.Printf("fragment error: %s: %v", msg, err)
+	w.Header().Set("Content-Type", "text/html")
+	fmt.Fprintf(w, `<p class="muted">%s</p>`, msg)
+}
+
+// apiError logs an error and returns a JSON error response.
+func apiError(w http.ResponseWriter, err error, msg string, status int) {
+	log.Printf("api error: %s: %v", msg, err)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(map[string]string{"error": msg})
 }
 
 // PageData is the base data passed to all page templates.
@@ -228,7 +244,11 @@ type FindingRow struct {
 // OverviewHandler renders the overview page.
 func OverviewHandler(tmpl *template.Template, s *store.Store, vmCollectors []*proxmox.VMCollector, jellyfinClient *jellyfin.Client, frigateClient *frigate.Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		results, _ := s.GetLatestCheckResults(r.Context())
+		results, err := s.GetLatestCheckResults(r.Context())
+		if err != nil {
+			respondError(w, tmpl, err, "Failed to load check results")
+			return
+		}
 
 		var servicesUp int
 		for _, r := range results {
@@ -316,7 +336,11 @@ func OverviewHandler(tmpl *template.Template, s *store.Store, vmCollectors []*pr
 // ServicesHandler renders the services page.
 func ServicesHandler(tmpl *template.Template, s *store.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		results, _ := s.GetLatestCheckResults(r.Context())
+		results, err := s.GetLatestCheckResults(r.Context())
+		if err != nil {
+			respondError(w, tmpl, err, "Failed to load services")
+			return
+		}
 
 		var rows []ServiceRow
 		seen := make(map[string]bool)
