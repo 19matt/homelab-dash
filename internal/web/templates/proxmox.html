@@ -45,6 +45,7 @@ document.addEventListener('DOMContentLoaded', function() {
             <th>CPU %</th>
             <th>RAM %</th>
             <th>Disk %</th>
+            <th>90-day</th>
         </tr>
     </thead>
     <tbody>
@@ -57,6 +58,20 @@ document.addEventListener('DOMContentLoaded', function() {
             <td class="mono">{{ printf "%.1f" (mulf .CPU 100.0) }}%</td>
             <td class="mono">{{ if gt .MaxMem 0 }}{{ printf "%.1f" (divf (tof .Mem) (tof .MaxMem) 100.0) }}%{{ else }}-{{ end }}</td>
             <td class="mono">{{ if gt .MaxDisk 0 }}{{ printf "%.1f" (divf (tof .Disk) (tof .MaxDisk) 100.0) }}%{{ else }}-{{ end }}</td>
+            <td>
+                {{ $uptime := index $.VMUptimeBars (printf "vm:%d:%s" .VMID .Name) }}
+                {{ if $uptime }}
+                <svg width="{{ mul (len $uptime) 6 }}" height="16" class="uptime-bar">
+                    {{ range $i, $d := $uptime }}
+                    <rect x="{{ mul $i 6 }}" y="0" width="5" height="16" rx="1" fill="{{ uptimeColor $d.Percent }}">
+                        <title>{{ $d.Date }}: {{ printf "%.1f" $d.Percent }}%</title>
+                    </rect>
+                    {{ end }}
+                </svg>
+                {{ else }}
+                <span class="muted">-</span>
+                {{ end }}
+            </td>
         </tr>
         {{ end }}
     </tbody>

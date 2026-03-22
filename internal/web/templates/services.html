@@ -7,8 +7,9 @@
             <th>Status</th>
             <th>Last Check</th>
             <th>Latency</th>
-            <th>24h Uptime</th>
-            <th>7d Uptime</th>
+            <th>24h</th>
+            <th>7d</th>
+            <th>90-day Uptime</th>
         </tr>
     </thead>
     <tbody>
@@ -20,6 +21,19 @@
             <td class="mono">{{ .LatencyMs }}ms</td>
             <td class="mono">{{ printf "%.1f" .Uptime24h }}%</td>
             <td class="mono">{{ printf "%.1f" .Uptime7d }}%</td>
+            <td>
+                {{ if .DailyUptime }}
+                <svg width="{{ mul (len .DailyUptime) 6 }}" height="20" class="uptime-bar">
+                    {{ range $i, $d := .DailyUptime }}
+                    <rect x="{{ mul $i 6 }}" y="0" width="5" height="20" rx="1" fill="{{ uptimeColor $d.Percent }}">
+                        <title>{{ $d.Date }}: {{ printf "%.1f" $d.Percent }}%</title>
+                    </rect>
+                    {{ end }}
+                </svg>
+                {{ else }}
+                <span class="muted">-</span>
+                {{ end }}
+            </td>
         </tr>
         {{ end }}
     </tbody>

@@ -18,6 +18,7 @@ import (
 // TemplateFuncMap provides helper functions for templates.
 var TemplateFuncMap = template.FuncMap{
 	"mulf": func(a, b float64) float64 { return a * b },
+	"mul":  func(a, b int) int { return a * b },
 	"divf": func(a, b float64, c float64) float64 {
 		if b == 0 {
 			return 0
@@ -38,6 +39,24 @@ var TemplateFuncMap = template.FuncMap{
 			return b
 		}
 		return "badge-unknown"
+	},
+	"uptimeColor": func(pct float64) string {
+		if pct >= 100 {
+			return "#22c55e"
+		} else if pct >= 95 {
+			return "#f59e0b"
+		} else if pct > 0 {
+			return "#ef4444"
+		}
+		return "#2a2d3a"
+	},
+	"barColor": func(pct float64) string {
+		if pct > 80 {
+			return "#ef4444"
+		} else if pct > 50 {
+			return "#f59e0b"
+		}
+		return "#22c55e"
 	},
 }
 
@@ -78,13 +97,21 @@ type NodeStat struct {
 
 // ServiceRow is a row in the services table.
 type ServiceRow struct {
-	Target    string
-	Check     string
-	Status    string
-	LatencyMs int64
-	Uptime24h float64
-	Uptime7d  float64
-	Timestamp time.Time
+	Target      string
+	Check       string
+	Status      string
+	LatencyMs   int64
+	Uptime24h   float64
+	Uptime7d    float64
+	Timestamp   time.Time
+	DailyUptime []store.DailyUptime
+}
+
+// SparklineDay is a single day in a 90-day sparkline.
+type SparklineDay struct {
+	Date     string
+	Percent  float64
+	DayIndex int
 }
 
 // ServicesData is the data for the services page.
@@ -96,8 +123,9 @@ type ServicesData struct {
 // ProxmoxData is the data for the proxmox page.
 type ProxmoxData struct {
 	PageData
-	Nodes []NodeStat
-	VMs   []proxmox.VMSummary
+	Nodes        []NodeStat
+	VMs          []proxmox.VMSummary
+	VMUptimeBars map[string][]store.DailyUptime
 }
 
 // MetricsData is the data for the metrics page.
@@ -237,15 +265,17 @@ func ServicesHandler(tmpl *template.Template, s *store.Store) http.HandlerFunc {
 
 			uptime24h, _ := s.GetUptimePercent(r.Context(), target, cr.Check, 24*time.Hour)
 			uptime7d, _ := s.GetUptimePercent(r.Context(), target, cr.Check, 7*24*time.Hour)
+			dailyUptime, _ := s.GetDailyUptime(r.Context(), target, cr.Check, 90)
 
 			rows = append(rows, ServiceRow{
-				Target:    target,
-				Check:     cr.Check,
-				Status:    cr.Status.String(),
-				LatencyMs: cr.Latency.Milliseconds(),
-				Uptime24h: uptime24h,
-				Uptime7d:  uptime7d,
-				Timestamp: cr.Timestamp,
+				Target:      target,
+				Check:       cr.Check,
+				Status:      cr.Status.String(),
+				LatencyMs:   cr.Latency.Milliseconds(),
+				Uptime24h:   uptime24h,
+				Uptime7d:    uptime7d,
+				Timestamp:   cr.Timestamp,
+				DailyUptime: dailyUptime,
 			})
 		}
 
@@ -273,18 +303,30 @@ func ProxmoxHandler(tmpl *template.Template, s *store.Store, vmCollectors []*pro
 
 		nodes := getNodeStats(s)
 
+		// Fetch daily uptime for each VM
+		vmUptimeBars := make(map[string][]store.DailyUptime)
+		for _, vm := range allVMs {
+			target := fmt.Sprintf("vm:%d:%s", vm.VMID, vm.Name)
+			uptime, _ := s.GetDailyUptime(r.Context(), target, "proxmox.vm.status", 90)
+			if uptime != nil {
+				vmUptimeBars[target] = uptime
+			}
+		}
+
 		contentData := struct {
-			Nodes []NodeStat
-			VMs   []proxmox.VMSummary
-		}{Nodes: nodes, VMs: allVMs}
+			Nodes        []NodeStat
+			VMs          []proxmox.VMSummary
+			VMUptimeBars map[string][]store.DailyUptime
+		}{Nodes: nodes, VMs: allVMs, VMUptimeBars: vmUptimeBars}
 
 		data := ProxmoxData{
 			PageData: PageData{
 				ActivePage: "proxmox",
 				Content:    renderTemplate(tmpl, "proxmox-content", contentData),
 			},
-			Nodes: nodes,
-			VMs:   allVMs,
+			Nodes:        nodes,
+			VMs:          allVMs,
+			VMUptimeBars: vmUptimeBars,
 		}
 
 		tmpl.ExecuteTemplate(w, "layout", data)
