@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/homelab/homelab-dash/internal/checker"
+	"github.com/homelab/homelab-dash/internal/integration/frigate"
+	"github.com/homelab/homelab-dash/internal/integration/jellyfin"
 	"github.com/homelab/homelab-dash/internal/integration/proxmox"
 	"github.com/homelab/homelab-dash/internal/store"
 )
@@ -76,15 +78,17 @@ type PageData struct {
 // OverviewData is the data for the overview page.
 type OverviewData struct {
 	PageData
-	NodesRunning  int
-	VMsRunning    int
-	VMsStopped    int
-	ServicesUp    int
-	ServicesTotal int
-	FindingsTotal int
-	StatusResults []checker.CheckResult
-	VMs           []proxmox.VMSummary
-	Nodes         []NodeStat
+	NodesRunning    int
+	VMsRunning      int
+	VMsStopped      int
+	ServicesUp      int
+	ServicesTotal   int
+	FindingsTotal   int
+	StatusResults   []checker.CheckResult
+	VMs             []proxmox.VMSummary
+	Nodes           []NodeStat
+	JellyfinEnabled bool
+	FrigateEnabled  bool
 }
 
 // NodeStat holds stats for a Proxmox node.
@@ -187,7 +191,7 @@ type FindingRow struct {
 }
 
 // OverviewHandler renders the overview page.
-func OverviewHandler(tmpl *template.Template, s *store.Store, vmCollectors []*proxmox.VMCollector) http.HandlerFunc {
+func OverviewHandler(tmpl *template.Template, s *store.Store, vmCollectors []*proxmox.VMCollector, jellyfinClient *jellyfin.Client, frigateClient *frigate.Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		results, _ := s.GetLatestCheckResults(r.Context())
 
@@ -222,25 +226,29 @@ func OverviewHandler(tmpl *template.Template, s *store.Store, vmCollectors []*pr
 		}
 
 		contentData := struct {
-			NodesRunning  int
-			VMsRunning    int
-			VMsStopped    int
-			ServicesUp    int
-			ServicesTotal int
-			FindingsTotal int
-			StatusResults []checker.CheckResult
-			VMs           []proxmox.VMSummary
-			Nodes         []NodeStat
+			NodesRunning    int
+			VMsRunning      int
+			VMsStopped      int
+			ServicesUp      int
+			ServicesTotal   int
+			FindingsTotal   int
+			StatusResults   []checker.CheckResult
+			VMs             []proxmox.VMSummary
+			Nodes           []NodeStat
+			JellyfinEnabled bool
+			FrigateEnabled  bool
 		}{
-			NodesRunning:  len(nodes),
-			VMsRunning:    running,
-			VMsStopped:    stopped,
-			ServicesUp:    servicesUp,
-			ServicesTotal: len(results),
-			FindingsTotal: findingsTotal,
-			StatusResults: results,
-			VMs:           allVMs,
-			Nodes:         nodes,
+			NodesRunning:    len(nodes),
+			VMsRunning:      running,
+			VMsStopped:      stopped,
+			ServicesUp:      servicesUp,
+			ServicesTotal:   len(results),
+			FindingsTotal:   findingsTotal,
+			StatusResults:   results,
+			VMs:             allVMs,
+			Nodes:           nodes,
+			JellyfinEnabled: jellyfinClient != nil,
+			FrigateEnabled:  frigateClient != nil,
 		}
 
 		data := OverviewData{
@@ -248,15 +256,17 @@ func OverviewHandler(tmpl *template.Template, s *store.Store, vmCollectors []*pr
 				ActivePage: "overview",
 				Content:    renderTemplate(tmpl, "overview-content", contentData),
 			},
-			NodesRunning:  contentData.NodesRunning,
-			VMsRunning:    contentData.VMsRunning,
-			VMsStopped:    contentData.VMsStopped,
-			ServicesUp:    contentData.ServicesUp,
-			ServicesTotal: contentData.ServicesTotal,
-			FindingsTotal: contentData.FindingsTotal,
-			StatusResults: contentData.StatusResults,
-			VMs:           contentData.VMs,
-			Nodes:         contentData.Nodes,
+			NodesRunning:    contentData.NodesRunning,
+			VMsRunning:      contentData.VMsRunning,
+			VMsStopped:      contentData.VMsStopped,
+			ServicesUp:      contentData.ServicesUp,
+			ServicesTotal:   contentData.ServicesTotal,
+			FindingsTotal:   contentData.FindingsTotal,
+			StatusResults:   contentData.StatusResults,
+			VMs:             contentData.VMs,
+			Nodes:           contentData.Nodes,
+			JellyfinEnabled: contentData.JellyfinEnabled,
+			FrigateEnabled:  contentData.FrigateEnabled,
 		}
 
 		tmpl.ExecuteTemplate(w, "layout", data)
@@ -664,6 +674,85 @@ func AlertsHandler(tmpl *template.Template, s *store.Store) http.HandlerFunc {
 				Content:    renderTemplate(tmpl, "alerts-content", contentData),
 			},
 			Events: rows,
+		}
+
+		tmpl.ExecuteTemplate(w, "layout", data)
+	}
+}
+
+// JellyfinHandler renders the Jellyfin page.
+func JellyfinHandler(tmpl *template.Template, client *jellyfin.Client) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+
+		info, _ := client.GetSystemInfo(ctx)
+		sessions, _ := client.GetSessions(ctx)
+		counts, _ := client.GetItemCounts(ctx)
+
+		// Filter to active sessions (with now playing)
+		var activeSessions []jellyfin.Session
+		for _, s := range sessions {
+			if s.NowPlayingItem != nil {
+				activeSessions = append(activeSessions, s)
+			}
+		}
+
+		contentData := struct {
+			Info     jellyfin.SystemInfo
+			Sessions []jellyfin.Session
+			Counts   jellyfin.ItemCounts
+		}{
+			Info:     info,
+			Sessions: activeSessions,
+			Counts:   counts,
+		}
+
+		data := struct {
+			PageData
+			Info     jellyfin.SystemInfo
+			Sessions []jellyfin.Session
+			Counts   jellyfin.ItemCounts
+		}{
+			PageData: PageData{
+				ActivePage: "jellyfin",
+				Content:    renderTemplate(tmpl, "jellyfin-content", contentData),
+			},
+			Info:     info,
+			Sessions: activeSessions,
+			Counts:   counts,
+		}
+
+		tmpl.ExecuteTemplate(w, "layout", data)
+	}
+}
+
+// FrigateHandler renders the Frigate page.
+func FrigateHandler(tmpl *template.Template, client *frigate.Client) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+
+		version, _ := client.GetVersion(ctx)
+		stats, _ := client.GetStats(ctx)
+
+		contentData := struct {
+			Version string
+			Stats   frigate.Stats
+		}{
+			Version: version,
+			Stats:   stats,
+		}
+
+		data := struct {
+			PageData
+			Version string
+			Stats   frigate.Stats
+		}{
+			PageData: PageData{
+				ActivePage: "frigate",
+				Content:    renderTemplate(tmpl, "frigate-content", contentData),
+			},
+			Version: version,
+			Stats:   stats,
 		}
 
 		tmpl.ExecuteTemplate(w, "layout", data)

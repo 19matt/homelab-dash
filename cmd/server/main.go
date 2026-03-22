@@ -13,6 +13,8 @@ import (
 	"github.com/homelab/homelab-dash/internal/alert"
 	"github.com/homelab/homelab-dash/internal/checker"
 	"github.com/homelab/homelab-dash/internal/config"
+	"github.com/homelab/homelab-dash/internal/integration/frigate"
+	"github.com/homelab/homelab-dash/internal/integration/jellyfin"
 	"github.com/homelab/homelab-dash/internal/integration/proxmox"
 	"github.com/homelab/homelab-dash/internal/scanner"
 	"github.com/homelab/homelab-dash/internal/scheduler"
@@ -76,6 +78,24 @@ func main() {
 		log.Printf("proxmox integration enabled: nodes=%v", cfg.Integrations.Proxmox.Nodes)
 	}
 
+	// Optional: Jellyfin integration
+	var jellyfinClient *jellyfin.Client
+	if cfg.Integrations.Jellyfin.Enabled && cfg.Integrations.Jellyfin.Host != "" {
+		jellyfinClient = jellyfin.NewClient(cfg.Integrations.Jellyfin)
+		sched.AddCollectorWithInterval(jellyfin.NewCollector(jellyfinClient), 60*time.Second)
+		sched.AddCheckerWithInterval(jellyfin.NewChecker(jellyfinClient), cfg.Interval)
+		log.Printf("jellyfin integration enabled: host=%s", cfg.Integrations.Jellyfin.Host)
+	}
+
+	// Optional: Frigate integration
+	var frigateClient *frigate.Client
+	if cfg.Integrations.Frigate.Enabled && cfg.Integrations.Frigate.Host != "" {
+		frigateClient = frigate.NewClient(cfg.Integrations.Frigate)
+		sched.AddCollectorWithInterval(frigate.NewCollector(frigateClient), 30*time.Second)
+		sched.AddCheckerWithInterval(frigate.NewChecker(frigateClient), cfg.Interval)
+		log.Printf("frigate integration enabled: host=%s", cfg.Integrations.Frigate.Host)
+	}
+
 	// Security scanner
 	scanEngine := scanner.NewEngine(s, cfg.Targets)
 	scanEngine.AddScanner(&scanner.PortScanner{})
@@ -104,7 +124,7 @@ func main() {
 	})
 
 	// Create web server with all routes
-	srv, err := web.NewServer(cfg.Server, s, hub, vmCollectors)
+	srv, err := web.NewServer(cfg.Server, s, hub, vmCollectors, jellyfinClient, frigateClient)
 	if err != nil {
 		log.Fatalf("failed to create web server: %v", err)
 	}

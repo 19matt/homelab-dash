@@ -5,6 +5,8 @@ import (
 	"html/template"
 	"net/http"
 
+	"github.com/homelab/homelab-dash/internal/integration/frigate"
+	"github.com/homelab/homelab-dash/internal/integration/jellyfin"
 	"github.com/homelab/homelab-dash/internal/integration/proxmox"
 	"github.com/homelab/homelab-dash/internal/store"
 )
@@ -79,5 +81,75 @@ func FindingsBadgeFragment(s *store.Store) http.HandlerFunc {
 				fmt.Fprint(w, `<span class="badge badge-unknown">0</span>`)
 			}
 		}
+	}
+}
+
+// JellyfinSummaryFragment returns the Jellyfin summary widget.
+func JellyfinSummaryFragment(client *jellyfin.Client) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+
+		info, infoErr := client.GetSystemInfo(ctx)
+		sessions, _ := client.GetSessions(ctx)
+		counts, _ := client.GetItemCounts(ctx)
+
+		w.Header().Set("Content-Type", "text/html")
+
+		if infoErr != nil {
+			fmt.Fprint(w, `<p class="muted">Jellyfin unreachable</p>`)
+			return
+		}
+
+		active := 0
+		transcoding := 0
+		for _, s := range sessions {
+			if s.NowPlayingItem != nil {
+				active++
+				if s.TranscodingInfo != nil {
+					transcoding++
+				}
+			}
+		}
+
+		fmt.Fprintf(w, `<div class="service-card"><div><div class="service-name">%s v%s</div>`, info.ServerName, info.Version)
+		fmt.Fprintf(w, `<div class="service-meta">%d watching`, active)
+		if transcoding > 0 {
+			fmt.Fprintf(w, ` (%d transcoding)`, transcoding)
+		}
+		fmt.Fprintf(w, `</div></div></div>`)
+		fmt.Fprintf(w, `<div class="service-card"><div><div class="service-meta">%d movies · %d episodes · %d songs</div></div></div>`,
+			counts.MovieCount, counts.EpisodeCount, counts.SongCount)
+	}
+}
+
+// FrigateSummaryFragment returns the Frigate summary widget.
+func FrigateSummaryFragment(client *frigate.Client) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+
+		version, versionErr := client.GetVersion(ctx)
+		stats, _ := client.GetStats(ctx)
+
+		w.Header().Set("Content-Type", "text/html")
+
+		if versionErr != nil {
+			fmt.Fprint(w, `<p class="muted">Frigate unreachable</p>`)
+			return
+		}
+
+		totalCameras := len(stats.Cameras)
+		activeCameras := 0
+		for _, cam := range stats.Cameras {
+			if cam.DetectionEnabled {
+				activeCameras++
+			}
+		}
+
+		uptime := stats.Service.Uptime
+		uptimeStr := formatUptime(int64(uptime))
+
+		fmt.Fprintf(w, `<div class="service-card"><div><div class="service-name">Frigate v%s</div>`, version)
+		fmt.Fprintf(w, `<div class="service-meta">%d/%d cameras active · Up %s</div></div></div>`,
+			activeCameras, totalCameras, uptimeStr)
 	}
 }

@@ -7,6 +7,8 @@ import (
 	"net/http"
 
 	"github.com/homelab/homelab-dash/internal/config"
+	"github.com/homelab/homelab-dash/internal/integration/frigate"
+	"github.com/homelab/homelab-dash/internal/integration/jellyfin"
 	"github.com/homelab/homelab-dash/internal/integration/proxmox"
 	"github.com/homelab/homelab-dash/internal/store"
 	"github.com/homelab/homelab-dash/internal/web/handlers"
@@ -21,7 +23,7 @@ type Server struct {
 }
 
 // NewServer creates a new web server with all routes registered.
-func NewServer(cfg config.ServerConfig, s *store.Store, hub *Hub, vmCollectors []*proxmox.VMCollector) (*Server, error) {
+func NewServer(cfg config.ServerConfig, s *store.Store, hub *Hub, vmCollectors []*proxmox.VMCollector, jellyfinClient *jellyfin.Client, frigateClient *frigate.Client) (*Server, error) {
 	// Parse templates
 	tmpl, err := template.New("").Funcs(handlers.TemplateFuncMap).ParseFS(StaticFS, "templates/*.html")
 	if err != nil {
@@ -69,7 +71,7 @@ func NewServer(cfg config.ServerConfig, s *store.Store, hub *Hub, vmCollectors [
 	mux.HandleFunc("GET /api/alerts/events", handlers.AlertEventsHandler(s))
 
 	// Page handlers
-	mux.HandleFunc("GET /{$}", handlers.OverviewHandler(tmpl, s, vmCollectors))
+	mux.HandleFunc("GET /{$}", handlers.OverviewHandler(tmpl, s, vmCollectors, jellyfinClient, frigateClient))
 	mux.HandleFunc("GET /services", handlers.ServicesHandler(tmpl, s))
 	mux.HandleFunc("GET /proxmox", handlers.ProxmoxHandler(tmpl, s, vmCollectors))
 	mux.HandleFunc("GET /metrics", handlers.MetricsHandler(tmpl, s))
@@ -77,12 +79,28 @@ func NewServer(cfg config.ServerConfig, s *store.Store, hub *Hub, vmCollectors [
 	mux.HandleFunc("GET /alerts", handlers.AlertsHandler(tmpl, s))
 	mux.HandleFunc("GET /host/{target...}", handlers.HostHandler(tmpl, s))
 
+	// Conditional integration pages
+	if jellyfinClient != nil {
+		mux.HandleFunc("GET /jellyfin", handlers.JellyfinHandler(tmpl, jellyfinClient))
+	}
+	if frigateClient != nil {
+		mux.HandleFunc("GET /frigate", handlers.FrigateHandler(tmpl, frigateClient))
+	}
+
 	// Htmx fragment handlers
 	mux.HandleFunc("GET /fragments/status-grid", handlers.StatusGridFragment(tmpl, s))
 	mux.HandleFunc("GET /fragments/proxmox-summary", handlers.ProxmoxSummaryFragment(tmpl, s, vmCollectors))
 	mux.HandleFunc("GET /fragments/vm-table", handlers.VMTableFragment(tmpl, vmCollectors))
 	mux.HandleFunc("GET /fragments/security-summary", handlers.SecuritySummaryFragment(tmpl, s))
 	mux.HandleFunc("GET /fragments/findings-badge", handlers.FindingsBadgeFragment(s))
+
+	// Conditional integration fragments
+	if jellyfinClient != nil {
+		mux.HandleFunc("GET /fragments/jellyfin-summary", handlers.JellyfinSummaryFragment(jellyfinClient))
+	}
+	if frigateClient != nil {
+		mux.HandleFunc("GET /fragments/frigate-summary", handlers.FrigateSummaryFragment(frigateClient))
+	}
 
 	// Wrap with auth if enabled
 	var handler http.Handler = mux
