@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/homelab/homelab-dash/internal/checker"
@@ -182,4 +183,54 @@ func (s *Store) GetFindingsForTarget(ctx context.Context, target string, limit i
 		findings = append(findings, f)
 	}
 	return findings, rows.Err()
+}
+
+// BatchUptime represents uptime for a target+check combination.
+type BatchUptime struct {
+	Target  string
+	Check   string
+	Percent float64
+}
+
+// GetBatchUptime calculates uptime for multiple targets in a single query.
+func (s *Store) GetBatchUptime(ctx context.Context, targets []string, checks map[string]string, window time.Duration) (map[string]float64, error) {
+	if len(targets) == 0 {
+		return make(map[string]float64), nil
+	}
+
+	since := time.Now().Add(-window)
+
+	// Build query with IN clause
+	query := `SELECT target, check_name,
+	                 COUNT(*) as total,
+	                 COALESCE(SUM(CASE WHEN status = 0 THEN 1 ELSE 0 END), 0) as passed
+	          FROM check_results
+	          WHERE timestamp > ? AND target IN (?` + strings.Repeat(",?", len(targets)-1) + `)
+	          GROUP BY target, check_name`
+
+	args := []interface{}{since}
+	for _, t := range targets {
+		args = append(args, t)
+	}
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("store: get batch uptime: %w", err)
+	}
+	defer rows.Close()
+
+	result := make(map[string]float64)
+	for rows.Next() {
+		var target, check string
+		var total, passed int
+		if err := rows.Scan(&target, &check, &total, &passed); err != nil {
+			return nil, fmt.Errorf("store: scan batch uptime: %w", err)
+		}
+		pct := 100.0
+		if total > 0 {
+			pct = float64(passed) / float64(total) * 100.0
+		}
+		result[target+":"+check] = pct
+	}
+	return result, rows.Err()
 }

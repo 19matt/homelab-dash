@@ -146,5 +146,39 @@ func (s *Store) GetAllLatestDataPoints(ctx context.Context, target string) (map[
 		}
 		result[metric] = value
 	}
+	if result == nil {
+		result = make(map[string]float64)
+	}
+
+	return result, rows.Err()
+}
+
+// GetAllNodeStats returns latest metrics for all node:* targets.
+func (s *Store) GetAllNodeStats(ctx context.Context) (map[string]map[string]float64, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT target, metric, value
+		 FROM data_points
+		 WHERE target LIKE 'node:%'
+		   AND metric IN ('node.cpu.percent', 'node.mem.percent', 'node.uptime')
+		 GROUP BY target, metric
+		 HAVING timestamp = MAX(timestamp)
+		 ORDER BY target, metric`)
+	if err != nil {
+		return nil, fmt.Errorf("store: get all node stats: %w", err)
+	}
+	defer rows.Close()
+
+	result := make(map[string]map[string]float64)
+	for rows.Next() {
+		var target, metric string
+		var value float64
+		if err := rows.Scan(&target, &metric, &value); err != nil {
+			return nil, fmt.Errorf("store: scan node stat: %w", err)
+		}
+		if result[target] == nil {
+			result[target] = make(map[string]float64)
+		}
+		result[target][metric] = value
+	}
 	return result, rows.Err()
 }
