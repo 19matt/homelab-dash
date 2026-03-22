@@ -32,7 +32,7 @@ func NewServer(
 	vmCollectors []*proxmox.VMCollector,
 	jellyfinClient *jellyfin.Client,
 	frigateClient *frigate.Client,
-	fullCfg *config.Config,
+	cfgMgr *config.Manager,
 	sched *scheduler.Scheduler,
 	version, buildTime string,
 	startTime time.Time,
@@ -91,8 +91,8 @@ func NewServer(
 	mux.HandleFunc("GET /api/audit/events", handlers.AuditEventsHandler(s))
 
 	// Settings API
-	mux.HandleFunc("POST /api/targets", handlers.AddTargetHandler(fullCfg, s))
-	mux.HandleFunc("DELETE /api/targets/{name}", handlers.RemoveTargetHandler(fullCfg, s))
+	mux.HandleFunc("POST /api/targets", handlers.AddTargetHandler(cfgMgr, s))
+	mux.HandleFunc("DELETE /api/targets/{name}", handlers.RemoveTargetHandler(cfgMgr, s))
 	mux.HandleFunc("POST /api/targets/test", handlers.TestTargetHandler())
 
 	// Page handlers
@@ -103,7 +103,7 @@ func NewServer(
 	mux.HandleFunc("GET /security", handlers.SecurityHandler(tmpl, s))
 	mux.HandleFunc("GET /alerts", handlers.AlertsHandler(tmpl, s))
 	mux.HandleFunc("GET /host/{target...}", handlers.HostHandler(tmpl, s))
-	mux.HandleFunc("GET /settings", handlers.SettingsHandler(tmpl, fullCfg))
+	mux.HandleFunc("GET /settings", handlers.SettingsHandler(tmpl, cfgMgr.Get()))
 	mux.HandleFunc("GET /audit", handlers.AuditHandler(tmpl, s))
 
 	// Conditional integration pages

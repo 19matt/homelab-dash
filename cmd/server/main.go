@@ -61,6 +61,9 @@ func main() {
 
 	startTime := time.Now()
 
+	// Create config manager for thread-safe config access
+	cfgMgr := config.NewManager(cfg)
+
 	// Create SSE hub
 	hub := web.NewHub()
 
@@ -152,7 +155,7 @@ func main() {
 	}
 
 	// Create web server with all routes
-	srv, err := web.NewServer(cfg.Server, s, hub, vmCollectors, jellyfinClient, frigateClient, cfg, sched, Version, BuildTime, startTime, integrationsEnabled)
+	srv, err := web.NewServer(cfg.Server, s, hub, vmCollectors, jellyfinClient, frigateClient, cfgMgr, sched, Version, BuildTime, startTime, integrationsEnabled)
 	if err != nil {
 		log.Fatalf("failed to create web server: %v", err)
 	}

@@ -57,7 +57,7 @@ type AddTargetRequest struct {
 }
 
 // AddTargetHandler adds a new target to the config.
-func AddTargetHandler(cfg *config.Config, s *store.Store) http.HandlerFunc {
+func AddTargetHandler(mgr *config.Manager, s *store.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req AddTargetRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -83,10 +83,8 @@ func AddTargetHandler(cfg *config.Config, s *store.Store) http.HandlerFunc {
 			Ports:  ports,
 		}
 
-		cfg.Targets = append(cfg.Targets, target)
-
-		// Save config
-		if err := cfg.Save(); err != nil {
+		// Add target with thread-safe mutation
+		if err := mgr.AddTarget(target); err != nil {
 			http.Error(w, fmt.Sprintf("failed to save config: %v", err), http.StatusInternalServerError)
 			return
 		}
@@ -105,7 +103,7 @@ func AddTargetHandler(cfg *config.Config, s *store.Store) http.HandlerFunc {
 }
 
 // RemoveTargetHandler removes a target from the config.
-func RemoveTargetHandler(cfg *config.Config, s *store.Store) http.HandlerFunc {
+func RemoveTargetHandler(mgr *config.Manager, s *store.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		name := r.PathValue("name")
 		if name == "" {
@@ -113,25 +111,14 @@ func RemoveTargetHandler(cfg *config.Config, s *store.Store) http.HandlerFunc {
 			return
 		}
 
-		found := false
-		var newTargets []config.TargetConfig
-		for _, t := range cfg.Targets {
-			if t.Name == name {
-				found = true
-				continue
-			}
-			newTargets = append(newTargets, t)
+		found, err := mgr.RemoveTarget(name)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("failed to save config: %v", err), http.StatusInternalServerError)
+			return
 		}
 
 		if !found {
 			http.Error(w, "target not found", http.StatusNotFound)
-			return
-		}
-
-		cfg.Targets = newTargets
-
-		if err := cfg.Save(); err != nil {
-			http.Error(w, fmt.Sprintf("failed to save config: %v", err), http.StatusInternalServerError)
 			return
 		}
 
