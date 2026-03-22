@@ -29,6 +29,47 @@ function connectSSE() {
 // Chart instances registry for updates
 var chartInstances = {};
 
+// Get Y-axis formatter based on metric name
+function getYFormatter(metric) {
+    if (!metric) return undefined;
+
+    if (metric.includes('percent')) {
+        return function(value) { return value.toFixed(0) + '%'; };
+    }
+    if (metric.includes('mem') || metric.includes('disk')) {
+        return function(value) { return humanBytes(value); };
+    }
+    if (metric.includes('net')) {
+        return function(value) { return humanBytes(value) + '/s'; };
+    }
+    if (metric.includes('load')) {
+        return function(value) { return value.toFixed(1); };
+    }
+    return undefined;
+}
+
+// Get threshold annotation for metric
+function getThreshold(metric) {
+    if (metric && metric.includes('cpu.percent')) {
+        return {
+            type: 'line',
+            yMin: 80,
+            yMax: 80,
+            borderColor: '#ef444466',
+            borderWidth: 1,
+            borderDash: [5, 5],
+            label: {
+                display: true,
+                content: '80%',
+                position: 'end',
+                color: '#ef4444',
+                font: { size: 9 }
+            }
+        };
+    }
+    return null;
+}
+
 // Create a doughnut gauge (for CPU/RAM)
 function createGauge(canvasId, value, label, color) {
     var ctx = document.getElementById(canvasId);
@@ -80,13 +121,56 @@ function createGauge(canvasId, value, label, color) {
     return chart;
 }
 
-// Create a line chart
-function createLineChart(canvasId, labels, data, label, color) {
+// Create a line chart with optional metric-based formatting
+function createLineChart(canvasId, labels, data, label, color, metric) {
     var ctx = document.getElementById(canvasId);
     if (!ctx) return null;
 
     if (chartInstances[canvasId]) {
         chartInstances[canvasId].destroy();
+    }
+
+    var yFormatter = getYFormatter(metric);
+    var threshold = getThreshold(metric);
+
+    var options = {
+        responsive: true,
+        maintainAspectRatio: false,
+        layout: {
+            padding: { top: 5, right: 10, bottom: 5, left: 5 }
+        },
+        scales: {
+            x: {
+                display: true,
+                grid: { color: '#2a2d3a' },
+                ticks: { color: '#64748b', maxTicksLimit: 6, font: { size: 9 } }
+            },
+            y: {
+                display: true,
+                grid: { color: '#2a2d3a' },
+                ticks: { color: '#64748b', font: { size: 9 }, maxTicksLimit: 5 }
+            }
+        },
+        plugins: {
+            legend: { display: false },
+            tooltip: {
+                callbacks: {
+                    label: function(context) {
+                        var val = context.parsed.y;
+                        if (yFormatter) return yFormatter(val);
+                        return val.toFixed(2);
+                    }
+                }
+            }
+        }
+    };
+
+    if (yFormatter) {
+        options.scales.y.ticks.callback = yFormatter;
+    }
+
+    if (threshold) {
+        options.plugins.annotation = { annotations: { threshold: threshold } };
     }
 
     var chart = new Chart(ctx, {
@@ -104,63 +188,46 @@ function createLineChart(canvasId, labels, data, label, color) {
                 borderWidth: 2
             }]
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            layout: {
-                padding: { top: 5, right: 10, bottom: 5, left: 5 }
-            },
-            scales: {
-                x: {
-                    display: true,
-                    grid: { color: '#2a2d3a' },
-                    ticks: { color: '#64748b', maxTicksLimit: 6, font: { size: 9 } }
-                },
-                y: {
-                    display: true,
-                    grid: { color: '#2a2d3a' },
-                    ticks: { color: '#64748b', font: { size: 9 }, maxTicksLimit: 5 }
-                }
-            },
-            plugins: {
-                legend: { display: false }
-            }
-        }
+        options: options
     });
 
     chartInstances[canvasId] = chart;
     return chart;
 }
 
-// Fetch and update a chart with history data
+// Fetch and update a chart with window
 function updateChart(chartId, target, metric, window) {
     return fetch('/api/metrics/history?target=' + encodeURIComponent(target) + '&metric=' + encodeURIComponent(metric) + '&window=' + window)
         .then(function(r) { return r.json(); })
         .then(function(data) {
-            var labels = data.map(function(p) {
-                var d = new Date(p.timestamp);
-                return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            });
-            var values = data.map(function(p) { return p.value; });
-
-            if (chartInstances[chartId]) {
-                chartInstances[chartId].data.labels = labels;
-                chartInstances[chartId].data.datasets[0].data = values;
-                chartInstances[chartId].update();
-            } else {
-                createLineChart(chartId, labels, values, metric, '#3b82f6');
-            }
+            updateChartWithData(chartId, data, metric);
         });
 }
 
-// Update all charts for a given target and window
-function updateAllCharts(target, window) {
-    if (!target || !window) return;
+// Fetch and update a chart with custom date range
+function updateChartRange(chartId, target, metric, from, to) {
+    return fetch('/api/metrics/history?target=' + encodeURIComponent(target) + '&metric=' + encodeURIComponent(metric) + '&from=' + from + '&to=' + to)
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            updateChartWithData(chartId, data, metric);
+        });
+}
 
-    updateChart('chart-cpu', target, target.startsWith('node:') ? 'node.cpu.percent' : 'vm.cpu.percent', window);
-    updateChart('chart-mem', target, target.startsWith('node:') ? 'node.mem.percent' : 'vm.mem.percent', window);
-    updateChart('chart-netin', target, 'vm.netin', window);
-    updateChart('chart-netout', target, 'vm.netout', window);
+// Update chart with data array
+function updateChartWithData(chartId, data, metric) {
+    var labels = data.map(function(p) {
+        var d = new Date(p.timestamp);
+        return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    });
+    var values = data.map(function(p) { return p.value; });
+
+    if (chartInstances[chartId]) {
+        chartInstances[chartId].data.labels = labels;
+        chartInstances[chartId].data.datasets[0].data = values;
+        chartInstances[chartId].update();
+    } else {
+        createLineChart(chartId, labels, values, metric, '#3b82f6', metric);
+    }
 }
 
 // Format bytes to human readable

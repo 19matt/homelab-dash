@@ -7,11 +7,18 @@
     {{ end }}
 </select>
 
-<div class="time-range">
-    <button data-window="1h" onclick="onWindowClick('1h')">1h</button>
-    <button data-window="6h" onclick="onWindowClick('6h')" class="active">6h</button>
-    <button data-window="24h" onclick="onWindowClick('24h')">24h</button>
-    <button data-window="7d" onclick="onWindowClick('7d')">7d</button>
+<div class="filter-bar">
+    <div class="time-range">
+        <button data-window="1h" onclick="onWindowClick('1h')">1h</button>
+        <button data-window="6h" onclick="onWindowClick('6h')" class="active">6h</button>
+        <button data-window="24h" onclick="onWindowClick('24h')">24h</button>
+        <button data-window="7d" onclick="onWindowClick('7d')">7d</button>
+    </div>
+    <div class="custom-range">
+        <input type="datetime-local" id="range-from">
+        <input type="datetime-local" id="range-to">
+        <button class="btn-small" onclick="applyCustomRange()">Apply</button>
+    </div>
 </div>
 
 <div class="chart-grid">
@@ -36,18 +43,39 @@
 <script>
 var currentTarget = {{ if .Targets }}'{{ index .Targets 0 }}'{{ else }}''{{ end }};
 var currentWindow = '6h';
+var customFrom = null;
+var customTo = null;
 
 function onTargetChange(target) {
     currentTarget = target;
+    customFrom = null;
+    customTo = null;
     loadCharts();
 }
 
 function onWindowClick(window) {
     currentWindow = window;
+    customFrom = null;
+    customTo = null;
     document.querySelectorAll('.time-range button').forEach(function(b) {
         b.classList.remove('active');
         if (b.dataset.window === window) b.classList.add('active');
     });
+    loadCharts();
+}
+
+function applyCustomRange() {
+    var fromVal = document.getElementById('range-from').value;
+    var toVal = document.getElementById('range-to').value;
+    if (!fromVal || !toVal) return;
+
+    customFrom = new Date(fromVal).toISOString();
+    customTo = new Date(toVal).toISOString();
+
+    document.querySelectorAll('.time-range button').forEach(function(b) {
+        b.classList.remove('active');
+    });
+
     loadCharts();
 }
 
@@ -56,15 +84,26 @@ function loadCharts() {
 
     var prefix = currentTarget.startsWith('node:') ? 'node.' : 'vm.';
 
-    updateChart('chart-cpu', currentTarget, prefix + 'cpu.percent', currentWindow);
-    updateChart('chart-mem', currentTarget, prefix + 'mem.percent', currentWindow);
-
-    if (prefix === 'vm.') {
-        updateChart('chart-netin', currentTarget, 'vm.netin', currentWindow);
-        updateChart('chart-netout', currentTarget, 'vm.netout', currentWindow);
+    if (customFrom && customTo) {
+        updateChartRange('chart-cpu', currentTarget, prefix + 'cpu.percent', customFrom, customTo);
+        updateChartRange('chart-mem', currentTarget, prefix + 'mem.percent', customFrom, customTo);
+        if (prefix === 'vm.') {
+            updateChartRange('chart-netin', currentTarget, 'vm.netin', customFrom, customTo);
+            updateChartRange('chart-netout', currentTarget, 'vm.netout', customFrom, customTo);
+        } else {
+            updateChartRange('chart-netin', currentTarget, 'node.load1', customFrom, customTo);
+            updateChartRange('chart-netout', currentTarget, 'node.load5', customFrom, customTo);
+        }
     } else {
-        updateChart('chart-netin', currentTarget, 'node.load1', currentWindow);
-        updateChart('chart-netout', currentTarget, 'node.load5', currentWindow);
+        updateChart('chart-cpu', currentTarget, prefix + 'cpu.percent', currentWindow);
+        updateChart('chart-mem', currentTarget, prefix + 'mem.percent', currentWindow);
+        if (prefix === 'vm.') {
+            updateChart('chart-netin', currentTarget, 'vm.netin', currentWindow);
+            updateChart('chart-netout', currentTarget, 'vm.netout', currentWindow);
+        } else {
+            updateChart('chart-netin', currentTarget, 'node.load1', currentWindow);
+            updateChart('chart-netout', currentTarget, 'node.load5', currentWindow);
+        }
     }
 }
 
