@@ -26,6 +26,20 @@ CREATE TABLE IF NOT EXISTS data_points (
 	value REAL NOT NULL,
 	labels TEXT
 );
+
+CREATE TABLE IF NOT EXISTS findings (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	timestamp DATETIME NOT NULL,
+	target TEXT NOT NULL,
+	scanner TEXT NOT NULL,
+	title TEXT NOT NULL,
+	description TEXT,
+	severity INTEGER NOT NULL,
+	remediation TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_findings_target ON findings(target);
+CREATE INDEX IF NOT EXISTS idx_findings_severity ON findings(severity);
 `
 
 // Store wraps a SQLite database connection.
