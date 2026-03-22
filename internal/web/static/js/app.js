@@ -107,16 +107,19 @@ function createLineChart(canvasId, labels, data, label, color) {
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            layout: {
+                padding: { top: 5, right: 10, bottom: 5, left: 5 }
+            },
             scales: {
                 x: {
                     display: true,
                     grid: { color: '#2a2d3a' },
-                    ticks: { color: '#64748b', maxTicksLimit: 8, font: { size: 10 } }
+                    ticks: { color: '#64748b', maxTicksLimit: 6, font: { size: 9 } }
                 },
                 y: {
                     display: true,
                     grid: { color: '#2a2d3a' },
-                    ticks: { color: '#64748b', font: { size: 10 } }
+                    ticks: { color: '#64748b', font: { size: 9 }, maxTicksLimit: 5 }
                 }
             },
             plugins: {
