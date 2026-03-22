@@ -442,3 +442,48 @@ select {
     font-family: var(--font-mono);
     font-weight: 600;
 }
+
+/* Filter bar */
+.filter-bar {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+    align-items: flex-end;
+}
+
+.filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.filter-label {
+    font-size: 0.7rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.filter-bar select {
+    min-width: 150px;
+    margin-bottom: 0;
+}
+
+.btn-small {
+    display: inline-block;
+    padding: 0.35rem 0.75rem;
+    background: var(--border);
+    color: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.15s;
+    margin-top: 0.25rem;
+}
+
+.btn-small:hover {
+    color: var(--text);
+    border-color: var(--muted);
+}

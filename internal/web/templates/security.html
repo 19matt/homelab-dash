@@ -3,11 +3,47 @@
 
 <div class="summary-bar" id="security-summary"
      hx-get="/fragments/security-summary" hx-trigger="every 5m" hx-swap="innerHTML">
-    <div class="badge badge-unknown">info: {{ .Summary.info }}</div>
-    <div class="badge badge-low">low: {{ .Summary.low }}</div>
-    <div class="badge badge-warn">medium: {{ .Summary.medium }}</div>
-    <div class="badge badge-fail">high: {{ .Summary.high }}</div>
-    <div class="badge badge-critical">critical: {{ .Summary.critical }}</div>
+    <span class="badge badge-unknown" style="cursor:pointer" onclick="filterSeverity('info')">info: {{ .Summary.info }}</span>
+    <span class="badge badge-low" style="cursor:pointer" onclick="filterSeverity('low')">low: {{ .Summary.low }}</span>
+    <span class="badge badge-warn" style="cursor:pointer" onclick="filterSeverity('medium')">medium: {{ .Summary.medium }}</span>
+    <span class="badge badge-fail" style="cursor:pointer" onclick="filterSeverity('high')">high: {{ .Summary.high }}</span>
+    <span class="badge badge-critical" style="cursor:pointer" onclick="filterSeverity('critical')">critical: {{ .Summary.critical }}</span>
+</div>
+
+<div class="filter-bar">
+    <div class="filter-group">
+        <label class="filter-label">Target</label>
+        <select id="filter-target" onchange="applyFilters()">
+            <option value="">All targets</option>
+            {{ range .Targets }}
+            <option value="{{ . }}">{{ . }}</option>
+            {{ end }}
+        </select>
+    </div>
+    <div class="filter-group">
+        <label class="filter-label">Scanner</label>
+        <select id="filter-scanner" onchange="applyFilters()">
+            <option value="">All scanners</option>
+            {{ range .Scanners }}
+            <option value="{{ . }}">{{ . }}</option>
+            {{ end }}
+        </select>
+    </div>
+    <div class="filter-group">
+        <label class="filter-label">Severity</label>
+        <select id="filter-severity" onchange="applyFilters()">
+            <option value="">All severities</option>
+            <option value="critical">Critical</option>
+            <option value="high">High</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low</option>
+            <option value="info">Info</option>
+        </select>
+    </div>
+    <div class="filter-group">
+        <span class="muted" id="filter-count">Showing {{ len .Findings }} findings</span>
+        <button class="btn-small" onclick="clearFilters()">Clear</button>
+    </div>
 </div>
 
 <div style="margin-bottom: 1rem;">
@@ -15,7 +51,7 @@
     <span class="muted" style="margin-left: 1rem;">Last 30 days</span>
 </div>
 
-<table>
+<table id="findings-table">
     <thead>
         <tr>
             <th>Severity</th>
@@ -27,7 +63,11 @@
     </thead>
     <tbody>
         {{ range .Findings }}
-        <tr class="finding-row" style="cursor:pointer"
+        <tr class="finding-row"
+            data-severity="{{ severityName .Severity }}"
+            data-target="{{ .Target }}"
+            data-scanner="{{ .Scanner }}"
+            style="cursor:pointer"
             onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'table-row':'none'">
             <td><span class="badge {{ severityBadge .Severity }}">{{ severityName .Severity }}</span></td>
             <td>{{ .Target }}</td>
@@ -44,12 +84,50 @@
         {{ end }}
     </tbody>
 </table>
+
+<script>
+function filterSeverity(sev) {
+    document.getElementById('filter-severity').value = sev;
+    applyFilters();
+}
+
+function applyFilters() {
+    var target = document.getElementById('filter-target').value;
+    var scanner = document.getElementById('filter-scanner').value;
+    var severity = document.getElementById('filter-severity').value;
+    var rows = document.querySelectorAll('#findings-table tbody tr.finding-row');
+    var count = 0;
+
+    rows.forEach(function(row) {
+        var matchTarget = !target || row.dataset.target === target;
+        var matchScanner = !scanner || row.dataset.scanner === scanner;
+        var matchSeverity = !severity || row.dataset.severity === severity;
+        var show = matchTarget && matchScanner && matchSeverity;
+        row.style.display = show ? '' : 'none';
+        // Also hide/show the detail row
+        var detail = row.nextElementSibling;
+        if (detail && detail.classList.contains('finding-detail')) {
+            if (!show) detail.style.display = 'none';
+        }
+        if (show) count++;
+    });
+
+    document.getElementById('filter-count').textContent = 'Showing ' + count + ' findings';
+}
+
+function clearFilters() {
+    document.getElementById('filter-target').value = '';
+    document.getElementById('filter-scanner').value = '';
+    document.getElementById('filter-severity').value = '';
+    applyFilters();
+}
+</script>
 {{ end }}
 
 {{ define "fragment-security-summary" }}
-<div class="badge badge-unknown">info: {{ .Summary.info }}</div>
-<div class="badge badge-low">low: {{ .Summary.low }}</div>
-<div class="badge badge-warn">medium: {{ .Summary.medium }}</div>
-<div class="badge badge-fail">high: {{ .Summary.high }}</div>
-<div class="badge badge-critical">critical: {{ .Summary.critical }}</div>
+<span class="badge badge-unknown" style="cursor:pointer" onclick="filterSeverity('info')">info: {{ .Summary.info }}</span>
+<span class="badge badge-low" style="cursor:pointer" onclick="filterSeverity('low')">low: {{ .Summary.low }}</span>
+<span class="badge badge-warn" style="cursor:pointer" onclick="filterSeverity('medium')">medium: {{ .Summary.medium }}</span>
+<span class="badge badge-fail" style="cursor:pointer" onclick="filterSeverity('high')">high: {{ .Summary.high }}</span>
+<span class="badge badge-critical" style="cursor:pointer" onclick="filterSeverity('critical')">critical: {{ .Summary.critical }}</span>
 {{ end }}

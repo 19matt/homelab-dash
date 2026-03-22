@@ -122,6 +122,8 @@ type SecurityData struct {
 	PageData
 	Findings []FindingRow
 	Summary  map[string]int
+	Targets  []string
+	Scanners []string
 }
 
 // FindingRow is a row in the findings table.
@@ -445,6 +447,9 @@ func SecurityHandler(tmpl *template.Template, s *store.Store) http.HandlerFunc {
 		summary, _ := s.GetFindingsSummary(r.Context())
 
 		var rows []FindingRow
+		targetSet := make(map[string]bool)
+		scannerSet := make(map[string]bool)
+
 		for _, f := range findings {
 			rows = append(rows, FindingRow{
 				ID:          f.ID,
@@ -456,14 +461,32 @@ func SecurityHandler(tmpl *template.Template, s *store.Store) http.HandlerFunc {
 				Severity:    f.Severity,
 				Remediation: f.Remediation,
 			})
+			targetSet[f.Target] = true
+			scannerSet[f.Scanner] = true
 		}
+
+		var targets []string
+		for t := range targetSet {
+			targets = append(targets, t)
+		}
+		sort.Strings(targets)
+
+		var scanners []string
+		for s := range scannerSet {
+			scanners = append(scanners, s)
+		}
+		sort.Strings(scanners)
 
 		contentData := struct {
 			Findings []FindingRow
 			Summary  map[string]int
+			Targets  []string
+			Scanners []string
 		}{
 			Findings: rows,
 			Summary:  summary,
+			Targets:  targets,
+			Scanners: scanners,
 		}
 
 		data := SecurityData{
@@ -473,6 +496,8 @@ func SecurityHandler(tmpl *template.Template, s *store.Store) http.HandlerFunc {
 			},
 			Findings: rows,
 			Summary:  summary,
+			Targets:  targets,
+			Scanners: scanners,
 		}
 
 		tmpl.ExecuteTemplate(w, "layout", data)
