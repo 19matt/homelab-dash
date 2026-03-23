@@ -106,4 +106,11 @@ CREATE INDEX IF NOT EXISTS idx_findings_severity_ts ON findings(severity DESC, t
 CREATE INDEX IF NOT EXISTS idx_history_target_scanner_title_resolved ON findings_history(target, scanner, title, resolved_at);
 `,
 	},
+	{
+		Version: "005",
+		SQL: `
+-- Index for GetLatestCheckResults queries that filter by timestamp and status
+CREATE INDEX IF NOT EXISTS idx_check_results_ts_status ON check_results(timestamp, status);
+`,
+	},
 }
