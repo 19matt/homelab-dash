@@ -476,7 +476,12 @@ func JellyfinHandler(tmpl *template.Template, client *jellyfin.Client) http.Hand
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 
-		info, _ := client.GetSystemInfo(ctx)
+		info, err := client.GetSystemInfo(ctx)
+		if err != nil {
+			respondError(w, tmpl, err, "Failed to connect to Jellyfin")
+			return
+		}
+
 		sessions, _ := client.GetSessions(ctx)
 		counts, _ := client.GetItemCounts(ctx)
 
@@ -527,7 +532,12 @@ func FrigateHandler(tmpl *template.Template, client *frigate.Client) http.Handle
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 
-		version, _ := client.GetVersion(ctx)
+		version, err := client.GetVersion(ctx)
+		if err != nil {
+			respondError(w, tmpl, err, "Failed to connect to Frigate")
+			return
+		}
+
 		stats, _ := client.GetStats(ctx)
 
 		contentData := struct {
