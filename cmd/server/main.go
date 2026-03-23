@@ -68,7 +68,7 @@ func main() {
 	hub := web.NewHub()
 
 	// Register service checkers from config
-	sched := scheduler.New(s, cfg.Interval)
+	sched := scheduler.New(s, cfg.Interval, cfgMgr)
 	for _, t := range cfg.Targets {
 		registerCheckers(sched, t)
 	}
