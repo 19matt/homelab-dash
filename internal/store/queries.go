@@ -13,9 +13,10 @@ import (
 
 // SaveCheckResult inserts a check result into the database.
 func (s *Store) SaveCheckResult(ctx context.Context, r checker.CheckResult) error {
-	result, err := s.db.ExecContext(ctx,
-		`INSERT INTO check_results (timestamp, target, check_name, status, message, latency_ms)
+	query := fmt.Sprintf(`INSERT INTO %s (%s, %s, %s, %s, %s, %s)
 		 VALUES (?, ?, ?, ?, ?, ?)`,
+		TableCheckResults, ColTimestamp, ColTarget, ColCheckName, ColStatus, ColMessage, ColLatencyMs)
+	result, err := s.db.ExecContext(ctx, query,
 		r.Timestamp, r.Target, r.Check, int(r.Status), r.Message, r.Latency.Milliseconds(),
 	)
 	if err != nil {
@@ -27,17 +28,25 @@ func (s *Store) SaveCheckResult(ctx context.Context, r checker.CheckResult) erro
 
 // GetLatestCheckResults returns the most recent check result per target+check combination.
 func (s *Store) GetLatestCheckResults(ctx context.Context) ([]checker.CheckResult, error) {
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT cr.timestamp, cr.target, cr.check_name, cr.status, cr.message, cr.latency_ms
-		 FROM check_results cr
+	query := fmt.Sprintf(`SELECT cr.%s, cr.%s, cr.%s, cr.%s, cr.%s, cr.%s
+		 FROM %s cr
 		 INNER JOIN (
-		   SELECT target, check_name, MAX(timestamp) AS max_ts
-		   FROM check_results
-		   GROUP BY target, check_name
-		 ) latest ON cr.target = latest.target
-		     AND cr.check_name = latest.check_name
-		     AND cr.timestamp = latest.max_ts
-		 ORDER BY cr.target, cr.check_name`)
+		   SELECT %s, %s, MAX(%s) AS max_ts
+		   FROM %s
+		   GROUP BY %s, %s
+		 ) latest ON cr.%s = latest.%s
+		     AND cr.%s = latest.%s
+		     AND cr.%s = latest.max_ts
+		 ORDER BY cr.%s, cr.%s`,
+		ColTimestamp, ColTarget, ColCheckName, ColStatus, ColMessage, ColLatencyMs,
+		TableCheckResults,
+		ColTarget, ColCheckName, ColTimestamp, TableCheckResults,
+		ColTarget, ColCheckName,
+		ColTarget, ColTarget,
+		ColCheckName, ColCheckName,
+		ColTimestamp,
+		ColTarget, ColCheckName)
+	rows, err := s.db.QueryContext(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("store: get latest check results: %w", err)
 	}
