@@ -12,6 +12,21 @@ import (
 	"github.com/homelab/homelab-dash/internal/store"
 )
 
+const (
+	// DefaultStartupDelayPerChecker is the delay between starting each checker at startup.
+	// This prevents all checkers from hitting the network simultaneously.
+	DefaultStartupDelayPerChecker = 100 * time.Millisecond
+
+	// DefaultStartupDelayPerCollector is the delay between starting each collector at startup.
+	DefaultStartupDelayPerCollector = 100 * time.Millisecond
+
+	// DefaultStartupDelayPerScan is the delay between starting each scan at startup.
+	DefaultStartupDelayPerScan = 1 * time.Second
+
+	// DefaultStartupDelayPerEvaluator is the delay between starting each evaluator at startup.
+	DefaultStartupDelayPerEvaluator = 1 * time.Second
+)
+
 type checkerEntry struct {
 	checker  checker.Checker
 	interval time.Duration
@@ -164,7 +179,9 @@ func (sc *Scheduler) Run(ctx context.Context) {
 		for i, e := range checkers {
 			childCtx, childCancel := context.WithCancel(ctx)
 			checkerCancels = append(checkerCancels, childCancel)
-			go sc.runChecker(childCtx, e, time.Duration(i)*100*time.Millisecond)
+			// Stagger checker startup to prevent simultaneous network requests
+			startupDelay := time.Duration(i) * DefaultStartupDelayPerChecker
+			go sc.runChecker(childCtx, e, startupDelay)
 		}
 
 		// Start the collectors and track their cancel functions
@@ -172,7 +189,9 @@ func (sc *Scheduler) Run(ctx context.Context) {
 		for i, e := range collectors {
 			childCtx, childCancel := context.WithCancel(ctx)
 			collectorCancels = append(collectorCancels, childCancel)
-			go sc.runCollector(childCtx, e, time.Duration(i)*100*time.Millisecond)
+			// Stagger collector startup to prevent resource contention
+			startupDelay := time.Duration(i) * DefaultStartupDelayPerCollector
+			go sc.runCollector(childCtx, e, startupDelay)
 		}
 
 		// Start the scans and track their cancel functions
@@ -180,7 +199,9 @@ func (sc *Scheduler) Run(ctx context.Context) {
 		for i, e := range scans {
 			childCtx, childCancel := context.WithCancel(ctx)
 			scanCancels = append(scanCancels, childCancel)
-			go sc.runScan(childCtx, e, time.Duration(i)*time.Second)
+			// Stagger scan startup with longer delay (scans are typically more resource-intensive)
+			startupDelay := time.Duration(i) * DefaultStartupDelayPerScan
+			go sc.runScan(childCtx, e, startupDelay)
 		}
 
 		// Store the cancel functions for later use
@@ -192,7 +213,9 @@ func (sc *Scheduler) Run(ctx context.Context) {
 
 	// Start evaluators (these are not target-specific)
 	for i, e := range sc.evaluators {
-		go sc.runEvaluator(ctx, e, time.Duration(i)*time.Second)
+		// Stagger evaluator startup to prevent simultaneous alert evaluation
+		startupDelay := time.Duration(i) * DefaultStartupDelayPerEvaluator
+		go sc.runEvaluator(ctx, e, startupDelay)
 	}
 
 	// Handle config changes and scheduler control in a separate goroutine
@@ -241,13 +264,19 @@ func (sc *Scheduler) registerTarget(target config.TargetConfig) {
 			c := checker.NewPingChecker(target.Name, target.Host, port)
 			childCtx, childCancel := context.WithCancel(sc.ctx)
 			checkerCancels = append(checkerCancels, childCancel)
-			go sc.runChecker(childCtx, checkerEntry{checker: c, interval: sc.interval}, time.Duration(len(sc.targetCheckerCancels[target.Name]))*100*time.Millisecond)
+			// Use existing checker count to calculate startup delay
+			existingCheckers := len(sc.targetCheckerCancels[target.Name])
+			startupDelay := time.Duration(existingCheckers) * DefaultStartupDelayPerChecker
+			go sc.runChecker(childCtx, checkerEntry{checker: c, interval: sc.interval}, startupDelay)
 		case "http":
 			for _, ep := range target.Endpoint {
 				c := checker.NewHTTPChecker(target.Name, target.Host, ep.Port, ep.Protocol)
 				childCtx, childCancel := context.WithCancel(sc.ctx)
 				checkerCancels = append(checkerCancels, childCancel)
-				go sc.runChecker(childCtx, checkerEntry{checker: c, interval: sc.interval}, time.Duration(len(sc.targetCheckerCancels[target.Name]))*100*time.Millisecond)
+				// Use existing checker count to calculate startup delay
+				existingCheckers := len(sc.targetCheckerCancels[target.Name])
+				startupDelay := time.Duration(existingCheckers) * DefaultStartupDelayPerChecker
+				go sc.runChecker(childCtx, checkerEntry{checker: c, interval: sc.interval}, startupDelay)
 			}
 		}
 	}

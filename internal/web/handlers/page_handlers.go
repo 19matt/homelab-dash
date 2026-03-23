@@ -5,6 +5,7 @@ import (
 	"html/template"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -170,15 +171,14 @@ func ProxmoxHandler(tmpl *template.Template, s *store.Store, vmCollectors []*pro
 
 		nodes := getNodeStats(s)
 
-		// Fetch daily uptime for each VM
-		vmUptimeBars := make(map[string][]store.DailyUptime)
-		for _, vm := range allVMs {
-			target := fmt.Sprintf("vm:%d:%s", vm.VMID, vm.Name)
-			uptime, _ := s.GetDailyUptime(r.Context(), target, "proxmox.vm.status", 90)
-			if uptime != nil {
-				vmUptimeBars[target] = uptime
-			}
+		// Prepare targets for batch query
+		targets := make([]string, len(allVMs))
+		for i, vm := range allVMs {
+			targets[i] = fmt.Sprintf("vm:%d:%s", vm.VMID, vm.Name)
 		}
+
+		// Fetch daily uptime for all VMs in a single batch query
+		vmUptimeBars, _ := s.GetDailyUptimeBatch(r.Context(), targets, "proxmox.vm.status", 90)
 
 		contentData := struct {
 			Nodes        []NodeStat
@@ -366,8 +366,36 @@ func HostHandler(tmpl *template.Template, s *store.Store) http.HandlerFunc {
 // SecurityHandler renders the security page.
 func SecurityHandler(tmpl *template.Template, s *store.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		findings, _ := s.GetFindings(r.Context())
+		// Parse pagination parameters
+		page := 1
+		pageSize := 50
+
+		if pageStr := r.URL.Query().Get("page"); pageStr != "" {
+			if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
+				page = p
+			}
+		}
+
+		if pageSizeStr := r.URL.Query().Get("page_size"); pageSizeStr != "" {
+			if ps, err := strconv.Atoi(pageSizeStr); err == nil && ps > 0 && ps <= 200 {
+				pageSize = ps
+			}
+		}
+
+		offset := (page - 1) * pageSize
+
+		// Get paginated findings and total count
+		findings, _ := s.GetFindingsPaginated(r.Context(), pageSize, offset)
+		totalCount, _ := s.GetFindingsCount(r.Context())
 		summary, _ := s.GetFindingsSummary(r.Context())
+
+		// Calculate pagination info
+		totalPages := (totalCount + pageSize - 1) / pageSize
+		if totalPages == 0 {
+			totalPages = 1
+		}
+		hasPrevPage := page > 1
+		hasNextPage := page < totalPages
 
 		var rows []FindingRow
 		targetSet := make(map[string]bool)
@@ -422,10 +450,17 @@ func SecurityHandler(tmpl *template.Template, s *store.Store) http.HandlerFunc {
 				ActivePage: "security",
 				Content:    content,
 			},
-			Findings: rows,
-			Summary:  summary,
-			Targets:  targets,
-			Scanners: scanners,
+			Findings:    rows,
+			Summary:     summary,
+			Targets:     targets,
+			Scanners:    scanners,
+			CurrentPage: page,
+			TotalPages:  totalPages,
+			TotalCount:  totalCount,
+			HasPrevPage: hasPrevPage,
+			HasNextPage: hasNextPage,
+			PrevPage:    page - 1,
+			NextPage:    page + 1,
 		}
 
 		tmpl.ExecuteTemplate(w, "layout", data)
@@ -435,8 +470,36 @@ func SecurityHandler(tmpl *template.Template, s *store.Store) http.HandlerFunc {
 // AlertsHandler renders the alerts page.
 func AlertsHandler(tmpl *template.Template, s *store.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// Parse pagination parameters
+		page := 1
+		pageSize := 50
+
+		if pageStr := r.URL.Query().Get("page"); pageStr != "" {
+			if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
+				page = p
+			}
+		}
+
+		if pageSizeStr := r.URL.Query().Get("page_size"); pageSizeStr != "" {
+			if ps, err := strconv.Atoi(pageSizeStr); err == nil && ps > 0 && ps <= 200 {
+				pageSize = ps
+			}
+		}
+
+		offset := (page - 1) * pageSize
 		since := time.Now().Add(-7 * 24 * time.Hour)
-		events, _ := s.GetAlertEvents(r.Context(), since, 100)
+
+		// Get paginated events and total count
+		events, _ := s.GetAlertEventsPaginated(r.Context(), since, pageSize, offset)
+		totalCount, _ := s.GetAlertEventsCount(r.Context(), since)
+
+		// Calculate pagination info
+		totalPages := (totalCount + pageSize - 1) / pageSize
+		if totalPages == 0 {
+			totalPages = 1
+		}
+		hasPrevPage := page > 1
+		hasNextPage := page < totalPages
 
 		var rows []AlertEventRow
 		for _, e := range events {
@@ -464,7 +527,14 @@ func AlertsHandler(tmpl *template.Template, s *store.Store) http.HandlerFunc {
 				ActivePage: "alerts",
 				Content:    content,
 			},
-			Events: rows,
+			Events:      rows,
+			CurrentPage: page,
+			TotalPages:  totalPages,
+			TotalCount:  totalCount,
+			HasPrevPage: hasPrevPage,
+			HasNextPage: hasNextPage,
+			PrevPage:    page - 1,
+			NextPage:    page + 1,
 		}
 
 		tmpl.ExecuteTemplate(w, "layout", data)

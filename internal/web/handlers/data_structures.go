@@ -96,16 +96,30 @@ type HostData struct {
 // SecurityData is the data for the security page.
 type SecurityData struct {
 	PageData
-	Findings []FindingRow
-	Summary  map[string]int
-	Targets  []string
-	Scanners []string
+	Findings    []FindingRow
+	Summary     map[string]int
+	Targets     []string
+	Scanners    []string
+	CurrentPage int
+	TotalPages  int
+	TotalCount  int
+	HasPrevPage bool
+	HasNextPage bool
+	PrevPage    int
+	NextPage    int
 }
 
 // AlertsData is the data for the alerts page.
 type AlertsData struct {
 	PageData
-	Events []AlertEventRow
+	Events      []AlertEventRow
+	CurrentPage int
+	TotalPages  int
+	TotalCount  int
+	HasPrevPage bool
+	HasNextPage bool
+	PrevPage    int
+	NextPage    int
 }
 
 // AlertEventRow is a row in the alerts table.

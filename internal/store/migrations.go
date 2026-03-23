@@ -96,4 +96,14 @@ CREATE INDEX IF NOT EXISTS idx_data_points_target_metric_ts ON data_points(targe
 CREATE INDEX IF NOT EXISTS idx_check_results_target_check_ts ON check_results(target, check_name, timestamp);
 `,
 	},
+	{
+		Version: "004",
+		SQL: `
+-- Composite index for findings queries ordered by severity then timestamp
+CREATE INDEX IF NOT EXISTS idx_findings_severity_ts ON findings(severity DESC, timestamp DESC);
+
+-- Composite index for findings history lookups
+CREATE INDEX IF NOT EXISTS idx_history_target_scanner_title_resolved ON findings_history(target, scanner, title, resolved_at);
+`,
+	},
 }

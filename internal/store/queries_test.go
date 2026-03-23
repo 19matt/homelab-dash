@@ -253,3 +253,183 @@ func TestRunRetentionCleanup(t *testing.T) {
 		t.Errorf("expected target 'new', got '%s'", results[0].Target)
 	}
 }
+
+func TestGetFindingsPaginated(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	// Insert test findings
+	findings := []Finding{
+		{Timestamp: time.Now(), Target: "svc1", Scanner: "ports", Title: "test1", Severity: 4},
+		{Timestamp: time.Now(), Target: "svc1", Scanner: "tls", Title: "test2", Severity: 3},
+		{Timestamp: time.Now(), Target: "svc2", Scanner: "headers", Title: "test3", Severity: 2},
+		{Timestamp: time.Now(), Target: "svc2", Scanner: "ports", Title: "test4", Severity: 1},
+		{Timestamp: time.Now(), Target: "svc3", Scanner: "tls", Title: "test5", Severity: 0},
+	}
+
+	if err := s.SaveFindings(ctx, findings); err != nil {
+		t.Fatalf("SaveFindings failed: %v", err)
+	}
+
+	// Test pagination
+	page1, err := s.GetFindingsPaginated(ctx, 2, 0)
+	if err != nil {
+		t.Fatalf("GetFindingsPaginated failed: %v", err)
+	}
+	if len(page1) != 2 {
+		t.Errorf("expected 2 findings on page 1, got %d", len(page1))
+	}
+
+	page2, err := s.GetFindingsPaginated(ctx, 2, 2)
+	if err != nil {
+		t.Fatalf("GetFindingsPaginated failed: %v", err)
+	}
+	if len(page2) != 2 {
+		t.Errorf("expected 2 findings on page 2, got %d", len(page2))
+	}
+
+	page3, err := s.GetFindingsPaginated(ctx, 2, 4)
+	if err != nil {
+		t.Fatalf("GetFindingsPaginated failed: %v", err)
+	}
+	if len(page3) != 1 {
+		t.Errorf("expected 1 finding on page 3, got %d", len(page3))
+	}
+
+	// Test count
+	count, err := s.GetFindingsCount(ctx)
+	if err != nil {
+		t.Fatalf("GetFindingsCount failed: %v", err)
+	}
+	if count != 5 {
+		t.Errorf("expected 5 total findings, got %d", count)
+	}
+
+	// Test default parameters
+	defaultPage, err := s.GetFindingsPaginated(ctx, 0, -1)
+	if err != nil {
+		t.Fatalf("GetFindingsPaginated with defaults failed: %v", err)
+	}
+	if len(defaultPage) != 5 {
+		t.Errorf("expected 5 findings with default page size, got %d", len(defaultPage))
+	}
+}
+
+func TestGetAlertEventsPaginated(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	now := time.Now()
+	since := now.Add(-24 * time.Hour)
+
+	// Insert test alert events
+	for i := 0; i < 5; i++ {
+		event := AlertEvent{
+			Timestamp: now.Add(-time.Duration(i) * time.Hour),
+			RuleName:  "test-rule",
+			Target:    "test-target",
+			Message:   "test message",
+			Severity:  "info",
+		}
+		if err := s.SaveAlertEvent(ctx, event); err != nil {
+			t.Fatalf("SaveAlertEvent failed: %v", err)
+		}
+	}
+
+	// Test pagination
+	page1, err := s.GetAlertEventsPaginated(ctx, since, 2, 0)
+	if err != nil {
+		t.Fatalf("GetAlertEventsPaginated failed: %v", err)
+	}
+	if len(page1) != 2 {
+		t.Errorf("expected 2 events on page 1, got %d", len(page1))
+	}
+
+	page2, err := s.GetAlertEventsPaginated(ctx, since, 2, 2)
+	if err != nil {
+		t.Fatalf("GetAlertEventsPaginated failed: %v", err)
+	}
+	if len(page2) != 2 {
+		t.Errorf("expected 2 events on page 2, got %d", len(page2))
+	}
+
+	page3, err := s.GetAlertEventsPaginated(ctx, since, 2, 4)
+	if err != nil {
+		t.Fatalf("GetAlertEventsPaginated failed: %v", err)
+	}
+	if len(page3) != 1 {
+		t.Errorf("expected 1 event on page 3, got %d", len(page3))
+	}
+
+	// Test count
+	count, err := s.GetAlertEventsCount(ctx, since)
+	if err != nil {
+		t.Fatalf("GetAlertEventsCount failed: %v", err)
+	}
+	if count != 5 {
+		t.Errorf("expected 5 total events, got %d", count)
+	}
+
+	// Test default parameters
+	defaultPage, err := s.GetAlertEventsPaginated(ctx, since, 0, -1)
+	if err != nil {
+		t.Fatalf("GetAlertEventsPaginated with defaults failed: %v", err)
+	}
+	if len(defaultPage) != 5 {
+		t.Errorf("expected 5 events with default page size, got %d", len(defaultPage))
+	}
+}
+
+func TestGetDailyUptimeBatch(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	now := time.Now()
+	yesterday := now.Add(-25 * time.Hour)
+
+	// Insert check results for multiple targets
+	targets := []string{"svc1", "svc2", "svc3"}
+	for _, target := range targets {
+		// Add pass today
+		s.SaveCheckResult(ctx, checker.CheckResult{
+			Timestamp: now,
+			Target:    target,
+			Check:     "ping",
+			Status:    checker.StatusPass,
+		})
+		// Add fail yesterday
+		s.SaveCheckResult(ctx, checker.CheckResult{
+			Timestamp: yesterday,
+			Target:    target,
+			Check:     "ping",
+			Status:    checker.StatusFail,
+		})
+	}
+
+	// Test batch query
+	result, err := s.GetDailyUptimeBatch(ctx, targets, "ping", 90)
+	if err != nil {
+		t.Fatalf("GetDailyUptimeBatch failed: %v", err)
+	}
+
+	// Should have results for all 3 targets
+	if len(result) != 3 {
+		t.Errorf("expected 3 targets, got %d", len(result))
+	}
+
+	// Each target should have 2 days of data
+	for _, target := range targets {
+		if len(result[target]) != 2 {
+			t.Errorf("expected 2 days for target %s, got %d", target, len(result[target]))
+		}
+	}
+
+	// Test empty targets list
+	emptyResult, err := s.GetDailyUptimeBatch(ctx, []string{}, "ping", 90)
+	if err != nil {
+		t.Fatalf("GetDailyUptimeBatch with empty targets failed: %v", err)
+	}
+	if len(emptyResult) != 0 {
+		t.Errorf("expected empty result for empty targets, got %d", len(emptyResult))
+	}
+}

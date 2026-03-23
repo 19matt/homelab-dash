@@ -178,6 +178,87 @@ func (s *Store) GetDailyUptime(ctx context.Context, target, check string, days i
 	return results, rows.Err()
 }
 
+// GetDailyUptimeBatch returns daily uptime percentages for multiple targets in a single query.
+func (s *Store) GetDailyUptimeBatch(ctx context.Context, targets []string, check string, days int) (map[string][]DailyUptime, error) {
+	if len(targets) == 0 {
+		return make(map[string][]DailyUptime), nil
+	}
+
+	since := time.Now().AddDate(0, 0, -days)
+
+	// Build placeholders for IN clause
+	placeholders := make([]string, len(targets))
+	args := make([]interface{}, len(targets)+2) // +2 for check and since
+	for i, target := range targets {
+		placeholders[i] = "?"
+		args[i] = target
+	}
+	args[len(targets)] = check
+	args[len(targets)+1] = since
+
+	query := fmt.Sprintf(`SELECT target, timestamp, status
+		 FROM check_results
+		 WHERE target IN (%s) AND check_name = ? AND timestamp > ?
+		 ORDER BY target, timestamp`, strings.Join(placeholders, ","))
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("store: get daily uptime batch: %w", err)
+	}
+	defer rows.Close()
+
+	// Group by target and day
+	type dayStats struct {
+		total  int
+		passed int
+	}
+	targetDayMap := make(map[string]map[string]*dayStats)
+
+	for rows.Next() {
+		var target string
+		var ts time.Time
+		var status int
+		if err := rows.Scan(&target, &ts, &status); err != nil {
+			return nil, fmt.Errorf("store: scan daily uptime batch: %w", err)
+		}
+
+		day := ts.Format("2006-01-02")
+		if targetDayMap[target] == nil {
+			targetDayMap[target] = make(map[string]*dayStats)
+		}
+		if targetDayMap[target][day] == nil {
+			targetDayMap[target][day] = &dayStats{}
+		}
+		targetDayMap[target][day].total++
+		if status == 0 {
+			targetDayMap[target][day].passed++
+		}
+	}
+
+	// Convert to result map
+	result := make(map[string][]DailyUptime)
+	for target, dayMap := range targetDayMap {
+		var dates []string
+		for d := range dayMap {
+			dates = append(dates, d)
+		}
+		sort.Strings(dates)
+
+		var uptime []DailyUptime
+		for _, d := range dates {
+			stats := dayMap[d]
+			pct := 100.0
+			if stats.total > 0 {
+				pct = float64(stats.passed) / float64(stats.total) * 100
+			}
+			uptime = append(uptime, DailyUptime{Date: d, Percent: pct})
+		}
+		result[target] = uptime
+	}
+
+	return result, rows.Err()
+}
+
 // GetFindingsForTarget returns security findings for a specific target.
 func (s *Store) GetFindingsForTarget(ctx context.Context, target string, limit int) ([]Finding, error) {
 	rows, err := s.db.QueryContext(ctx,

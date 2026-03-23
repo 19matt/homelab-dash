@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"fmt"
+	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -19,6 +20,12 @@ func Open(path string) (*Store, error) {
 		return nil, fmt.Errorf("store: open %s: %w", path, err)
 	}
 
+	// Configure connection pool for SQLite
+	// SQLite doesn't support true concurrent writes, so limit to 1 connection
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
+	db.SetConnMaxLifetime(5 * time.Minute)
+
 	if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("store: set journal_mode: %w", err)
@@ -27,6 +34,22 @@ func Open(path string) (*Store, error) {
 	if _, err := db.Exec("PRAGMA busy_timeout=5000"); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("store: set busy_timeout: %w", err)
+	}
+
+	// Optimize SQLite for better performance
+	if _, err := db.Exec("PRAGMA synchronous=NORMAL"); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("store: set synchronous: %w", err)
+	}
+
+	if _, err := db.Exec("PRAGMA cache_size=-2000"); err != nil { // 2MB cache
+		db.Close()
+		return nil, fmt.Errorf("store: set cache_size: %w", err)
+	}
+
+	if _, err := db.Exec("PRAGMA foreign_keys=ON"); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("store: set foreign_keys: %w", err)
 	}
 
 	s := &Store{db: db}

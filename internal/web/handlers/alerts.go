@@ -14,6 +14,7 @@ func AlertEventsHandler(s *store.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		sinceStr := r.URL.Query().Get("since")
 		limitStr := r.URL.Query().Get("limit")
+		offsetStr := r.URL.Query().Get("offset")
 
 		since := time.Now().Add(-7 * 24 * time.Hour) // default: last 7 days
 		if sinceStr != "" {
@@ -29,7 +30,14 @@ func AlertEventsHandler(s *store.Store) http.HandlerFunc {
 			}
 		}
 
-		events, err := s.GetAlertEvents(r.Context(), since, limit)
+		offset := 0
+		if offsetStr != "" {
+			if o, err := strconv.Atoi(offsetStr); err == nil && o >= 0 {
+				offset = o
+			}
+		}
+
+		events, err := s.GetAlertEventsPaginated(r.Context(), since, limit, offset)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return

@@ -79,6 +79,7 @@ func (s *Store) SaveFindings(ctx context.Context, findings []Finding) error {
 
 	// Insert new findings and update history
 	if len(findings) > 0 {
+		// Batch insert findings
 		stmt, err := tx.PrepareContext(ctx,
 			`INSERT INTO findings (timestamp, target, scanner, title, description, severity, remediation, scan_id)
 			 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
@@ -92,26 +93,59 @@ func (s *Store) SaveFindings(ctx context.Context, findings []Finding) error {
 				f.Timestamp, f.Target, f.Scanner, f.Title, f.Description, f.Severity, f.Remediation, f.ScanID); err != nil {
 				return fmt.Errorf("store: insert finding: %w", err)
 			}
+		}
 
-			// Check if finding exists in history
-			var historyID int64
-			err := tx.QueryRowContext(ctx,
-				`SELECT id FROM findings_history
-				 WHERE target = ? AND scanner = ? AND title = ? AND resolved_at IS NULL`,
-				f.Target, f.Scanner, f.Title).Scan(&historyID)
+		// Get all existing history records at once
+		historyRows, err := tx.QueryContext(ctx,
+			`SELECT id, target, scanner, title FROM findings_history WHERE resolved_at IS NULL`)
+		if err != nil {
+			return fmt.Errorf("store: get history: %w", err)
+		}
+		defer historyRows.Close()
 
-			if err != nil {
-				// New finding - insert into history
-				tx.ExecContext(ctx,
-					`INSERT INTO findings_history (first_seen, last_seen, target, scanner, title, description, severity, remediation)
-					 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-					now, now, f.Target, f.Scanner, f.Title, f.Description, f.Severity, f.Remediation)
-			} else {
+		historyMap := make(map[findingKey]int64)
+		for historyRows.Next() {
+			var id int64
+			var target, scanner, title string
+			if err := historyRows.Scan(&id, &target, &scanner, &title); err != nil {
+				return fmt.Errorf("store: scan history: %w", err)
+			}
+			historyMap[findingKey{target, scanner, title}] = id
+		}
+		historyRows.Close()
+
+		// Prepare statements for history operations
+		insertHistoryStmt, err := tx.PrepareContext(ctx,
+			`INSERT INTO findings_history (first_seen, last_seen, target, scanner, title, description, severity, remediation)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+		if err != nil {
+			return fmt.Errorf("store: prepare history insert: %w", err)
+		}
+		defer insertHistoryStmt.Close()
+
+		updateHistoryStmt, err := tx.PrepareContext(ctx,
+			`UPDATE findings_history SET last_seen = ?, severity = ?, description = ?, remediation = ?
+			 WHERE id = ?`)
+		if err != nil {
+			return fmt.Errorf("store: prepare history update: %w", err)
+		}
+		defer updateHistoryStmt.Close()
+
+		// Process findings for history
+		for _, f := range findings {
+			key := findingKey{f.Target, f.Scanner, f.Title}
+			if historyID, exists := historyMap[key]; exists {
 				// Existing finding - update last_seen
-				tx.ExecContext(ctx,
-					`UPDATE findings_history SET last_seen = ?, severity = ?, description = ?, remediation = ?
-					 WHERE id = ?`,
-					now, f.Severity, f.Description, f.Remediation, historyID)
+				if _, err := updateHistoryStmt.ExecContext(ctx,
+					now, f.Severity, f.Description, f.Remediation, historyID); err != nil {
+					return fmt.Errorf("store: update history: %w", err)
+				}
+			} else {
+				// New finding - insert into history
+				if _, err := insertHistoryStmt.ExecContext(ctx,
+					now, now, f.Target, f.Scanner, f.Title, f.Description, f.Severity, f.Remediation); err != nil {
+					return fmt.Errorf("store: insert history: %w", err)
+				}
 			}
 		}
 	}
@@ -120,6 +154,7 @@ func (s *Store) SaveFindings(ctx context.Context, findings []Finding) error {
 }
 
 // GetFindings returns all current findings ordered by severity descending then timestamp.
+// Deprecated: Use GetFindingsPaginated for better performance with large datasets.
 func (s *Store) GetFindings(ctx context.Context) ([]Finding, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT id, timestamp, target, scanner, title, description, severity, remediation, scan_id
@@ -140,6 +175,47 @@ func (s *Store) GetFindings(ctx context.Context) ([]Finding, error) {
 		findings = append(findings, f)
 	}
 	return findings, rows.Err()
+}
+
+// GetFindingsPaginated returns current findings with pagination support.
+func (s *Store) GetFindingsPaginated(ctx context.Context, limit, offset int) ([]Finding, error) {
+	if limit <= 0 {
+		limit = 50 // Default page size
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, timestamp, target, scanner, title, description, severity, remediation, scan_id
+		 FROM findings
+		 ORDER BY severity DESC, timestamp DESC
+		 LIMIT ? OFFSET ?`, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("store: get findings paginated: %w", err)
+	}
+	defer rows.Close()
+
+	var findings []Finding
+	for rows.Next() {
+		var f Finding
+		if err := rows.Scan(&f.ID, &f.Timestamp, &f.Target, &f.Scanner,
+			&f.Title, &f.Description, &f.Severity, &f.Remediation, &f.ScanID); err != nil {
+			return nil, fmt.Errorf("store: scan finding: %w", err)
+		}
+		findings = append(findings, f)
+	}
+	return findings, rows.Err()
+}
+
+// GetFindingsCount returns the total count of current findings.
+func (s *Store) GetFindingsCount(ctx context.Context) (int, error) {
+	var count int
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM findings`).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("store: get findings count: %w", err)
+	}
+	return count, nil
 }
 
 // GetFindingsFiltered returns current findings with optional filters.
