@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"log"
 	"net/http"
 	"time"
 
@@ -162,12 +163,22 @@ func TestTargetHandler() http.HandlerFunc {
 			switch check {
 			case "ping":
 				c := checker.NewPingChecker("test", req.Host, req.Port)
-				result, _ := c.Check(ctx)
-				results["ping"] = result.Status.String()
+				result, err := c.Check(ctx)
+				if err != nil {
+					log.Printf("test target ping check failed: %v", err)
+					results["ping"] = "error"
+				} else {
+					results["ping"] = result.Status.String()
+				}
 			case "http":
 				c := checker.NewHTTPChecker("test", req.Host, req.Port, "http", false)
-				result, _ := c.Check(ctx)
-				results["http"] = result.Status.String()
+				result, err := c.Check(ctx)
+				if err != nil {
+					log.Printf("test target http check failed: %v", err)
+					results["http"] = "error"
+				} else {
+					results["http"] = result.Status.String()
+				}
 			}
 		}
 

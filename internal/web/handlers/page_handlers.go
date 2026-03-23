@@ -3,6 +3,7 @@ package handlers
 import (
 	"fmt"
 	"html/template"
+	"log"
 	"net/http"
 	"sort"
 	"strconv"
@@ -49,7 +50,11 @@ func OverviewHandler(tmpl *template.Template, s *store.Store, vmCollectors []*pr
 		nodes := getNodeStats(s)
 
 		// Get findings count
-		summary, _ := s.GetFindingsSummary(r.Context())
+		summary, err := s.GetFindingsSummary(r.Context())
+		if err != nil {
+			log.Printf("overview: failed to get findings summary: %v", err)
+			summary = make(map[string]int)
+		}
 		findingsTotal := 0
 		for _, count := range summary {
 			findingsTotal += count
@@ -126,9 +131,18 @@ func ServicesHandler(tmpl *template.Template, s *store.Store) http.HandlerFunc {
 			}
 			seen[target] = true
 
-			uptime24h, _ := s.GetUptimePercent(r.Context(), target, cr.Check, 24*time.Hour)
-			uptime7d, _ := s.GetUptimePercent(r.Context(), target, cr.Check, 7*24*time.Hour)
-			dailyUptime, _ := s.GetDailyUptime(r.Context(), target, cr.Check, 90)
+			uptime24h, err := s.GetUptimePercent(r.Context(), target, cr.Check, 24*time.Hour)
+			if err != nil {
+				log.Printf("services: failed to get 24h uptime for %s: %v", target, err)
+			}
+			uptime7d, err := s.GetUptimePercent(r.Context(), target, cr.Check, 7*24*time.Hour)
+			if err != nil {
+				log.Printf("services: failed to get 7d uptime for %s: %v", target, err)
+			}
+			dailyUptime, err := s.GetDailyUptime(r.Context(), target, cr.Check, 90)
+			if err != nil {
+				log.Printf("services: failed to get daily uptime for %s: %v", target, err)
+			}
 
 			rows = append(rows, ServiceRow{
 				Target:      target,
@@ -178,7 +192,11 @@ func ProxmoxHandler(tmpl *template.Template, s *store.Store, vmCollectors []*pro
 		}
 
 		// Fetch daily uptime for all VMs in a single batch query
-		vmUptimeBars, _ := s.GetDailyUptimeBatch(r.Context(), targets, "proxmox.vm.status", 90)
+		vmUptimeBars, err := s.GetDailyUptimeBatch(r.Context(), targets, "proxmox.vm.status", 90)
+		if err != nil {
+			log.Printf("proxmox: failed to get daily uptime batch: %v", err)
+			vmUptimeBars = make(map[string][]store.DailyUptime)
+		}
 
 		contentData := struct {
 			Nodes        []NodeStat
@@ -208,8 +226,16 @@ func ProxmoxHandler(tmpl *template.Template, s *store.Store, vmCollectors []*pro
 // MetricsHandler renders the metrics page.
 func MetricsHandler(tmpl *template.Template, s *store.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		vmTargets, _ := s.GetAllTargetsWithMetric(r.Context(), "vm.cpu.percent")
-		nodeTargets, _ := s.GetAllTargetsWithMetric(r.Context(), "node.cpu.percent")
+		vmTargets, err := s.GetAllTargetsWithMetric(r.Context(), "vm.cpu.percent")
+		if err != nil {
+			log.Printf("metrics: failed to get VM targets: %v", err)
+			vmTargets = nil
+		}
+		nodeTargets, err := s.GetAllTargetsWithMetric(r.Context(), "node.cpu.percent")
+		if err != nil {
+			log.Printf("metrics: failed to get node targets: %v", err)
+			nodeTargets = nil
+		}
 
 		seen := make(map[string]bool)
 		var targets []string
@@ -265,7 +291,10 @@ func HostHandler(tmpl *template.Template, s *store.Store) http.HandlerFunc {
 			vmType = "qemu"
 
 			// Get VM status from recent checks
-			checks, _ := s.GetRecentCheckResults(r.Context(), target, 1)
+			checks, err := s.GetRecentCheckResults(r.Context(), target, 1)
+			if err != nil {
+				log.Printf("host: failed to get recent checks for %s: %v", target, err)
+			}
 			if len(checks) > 0 {
 				if checks[0].Check == "proxmox.vm.status" {
 					if checks[0].Status == checker.StatusPass {
@@ -285,7 +314,10 @@ func HostHandler(tmpl *template.Template, s *store.Store) http.HandlerFunc {
 			"vm.cpu.percent", "vm.mem.percent", "vm.uptime",
 		}
 		for _, m := range metricNames {
-			dp, _ := s.GetLatestDataPoint(r.Context(), target, m)
+			dp, err := s.GetLatestDataPoint(r.Context(), target, m)
+			if err != nil {
+				log.Printf("host: failed to get latest data point for %s/%s: %v", target, m, err)
+			}
 			if dp != nil {
 				metrics[m] = dp.Value
 			}
@@ -298,10 +330,16 @@ func HostHandler(tmpl *template.Template, s *store.Store) http.HandlerFunc {
 			vmUptime = formatUptime(int64(uptime))
 		}
 
-		recentChecks, _ := s.GetRecentCheckResults(r.Context(), target, 20)
+		recentChecks, err := s.GetRecentCheckResults(r.Context(), target, 20)
+		if err != nil {
+			log.Printf("host: failed to get recent checks for %s: %v", target, err)
+		}
 
 		// Get findings for this target
-		storeFindings, _ := s.GetFindingsForTarget(r.Context(), target, 5)
+		storeFindings, err := s.GetFindingsForTarget(r.Context(), target, 5)
+		if err != nil {
+			log.Printf("host: failed to get findings for %s: %v", target, err)
+		}
 		var findings []FindingRow
 		for _, f := range storeFindings {
 			findings = append(findings, FindingRow{
@@ -385,9 +423,21 @@ func SecurityHandler(tmpl *template.Template, s *store.Store) http.HandlerFunc {
 		offset := (page - 1) * pageSize
 
 		// Get paginated findings and total count
-		findings, _ := s.GetFindingsPaginated(r.Context(), pageSize, offset)
-		totalCount, _ := s.GetFindingsCount(r.Context())
-		summary, _ := s.GetFindingsSummary(r.Context())
+		findings, err := s.GetFindingsPaginated(r.Context(), pageSize, offset)
+		if err != nil {
+			log.Printf("security: failed to get findings: %v", err)
+			findings = nil
+		}
+		totalCount, err := s.GetFindingsCount(r.Context())
+		if err != nil {
+			log.Printf("security: failed to get findings count: %v", err)
+			totalCount = 0
+		}
+		summary, err := s.GetFindingsSummary(r.Context())
+		if err != nil {
+			log.Printf("security: failed to get findings summary: %v", err)
+			summary = make(map[string]int)
+		}
 
 		// Calculate pagination info
 		totalPages := (totalCount + pageSize - 1) / pageSize
@@ -490,8 +540,16 @@ func AlertsHandler(tmpl *template.Template, s *store.Store) http.HandlerFunc {
 		since := time.Now().Add(-7 * 24 * time.Hour)
 
 		// Get paginated events and total count
-		events, _ := s.GetAlertEventsPaginated(r.Context(), since, pageSize, offset)
-		totalCount, _ := s.GetAlertEventsCount(r.Context(), since)
+		events, err := s.GetAlertEventsPaginated(r.Context(), since, pageSize, offset)
+		if err != nil {
+			log.Printf("alerts: failed to get events: %v", err)
+			events = nil
+		}
+		totalCount, err := s.GetAlertEventsCount(r.Context(), since)
+		if err != nil {
+			log.Printf("alerts: failed to get events count: %v", err)
+			totalCount = 0
+		}
 
 		// Calculate pagination info
 		totalPages := (totalCount + pageSize - 1) / pageSize
@@ -552,8 +610,15 @@ func JellyfinHandler(tmpl *template.Template, client JellyfinClient) http.Handle
 			return
 		}
 
-		sessions, _ := client.GetSessions(ctx)
-		counts, _ := client.GetItemCounts(ctx)
+		sessions, err := client.GetSessions(ctx)
+		if err != nil {
+			log.Printf("jellyfin: failed to get sessions: %v", err)
+			sessions = nil
+		}
+		counts, err := client.GetItemCounts(ctx)
+		if err != nil {
+			log.Printf("jellyfin: failed to get item counts: %v", err)
+		}
 
 		// Filter to active sessions (with now playing)
 		var activeSessions []jellyfin.Session
@@ -608,7 +673,10 @@ func FrigateHandler(tmpl *template.Template, client FrigateClient) http.HandlerF
 			return
 		}
 
-		stats, _ := client.GetStats(ctx)
+		stats, err := client.GetStats(ctx)
+		if err != nil {
+			log.Printf("frigate: failed to get stats: %v", err)
+		}
 
 		contentData := struct {
 			Version string
