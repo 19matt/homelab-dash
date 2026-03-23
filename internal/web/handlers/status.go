@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"time"
 
@@ -32,7 +33,8 @@ func StatusHandler(s *store.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		results, err := s.GetLatestCheckResults(r.Context())
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			log.Printf("status: failed to get latest check results: %v", err)
+			http.Error(w, "failed to retrieve status", http.StatusInternalServerError)
 			return
 		}
 
@@ -79,7 +81,8 @@ func UptimeHandler(s *store.Store) http.HandlerFunc {
 
 		pct, err := s.GetUptimePercent(r.Context(), target, check, window)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			log.Printf("uptime: failed to get uptime percent for %s/%s: %v", target, check, err)
+			http.Error(w, "failed to retrieve uptime", http.StatusInternalServerError)
 			return
 		}
 
