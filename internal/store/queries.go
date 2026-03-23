@@ -13,7 +13,7 @@ import (
 
 // SaveCheckResult inserts a check result into the database.
 func (s *Store) SaveCheckResult(ctx context.Context, r checker.CheckResult) error {
-	_, err := s.db.ExecContext(ctx,
+	result, err := s.db.ExecContext(ctx,
 		`INSERT INTO check_results (timestamp, target, check_name, status, message, latency_ms)
 		 VALUES (?, ?, ?, ?, ?, ?)`,
 		r.Timestamp, r.Target, r.Check, int(r.Status), r.Message, r.Latency.Milliseconds(),
@@ -21,6 +21,7 @@ func (s *Store) SaveCheckResult(ctx context.Context, r checker.CheckResult) erro
 	if err != nil {
 		return fmt.Errorf("store: save check result: %w", err)
 	}
+	_ = result
 	return nil
 }
 

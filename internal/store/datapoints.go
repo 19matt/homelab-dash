@@ -40,7 +40,8 @@ func (s *Store) SaveDataPoints(ctx context.Context, points []collector.DataPoint
 			labelsJSON = string(b)
 		}
 
-		if _, err := stmt.ExecContext(ctx, p.Timestamp, p.Target, p.Metric, p.Value, labelsJSON); err != nil {
+		if result, err := stmt.ExecContext(ctx, p.Timestamp, p.Target, p.Metric, p.Value, labelsJSON); err != nil {
+			_ = result
 			return fmt.Errorf("store: insert data point: %w", err)
 		}
 	}

@@ -19,12 +19,13 @@ type AlertEvent struct {
 // SaveAlertEvent inserts an alert event into the database with retry logic.
 func (s *Store) SaveAlertEvent(ctx context.Context, event AlertEvent) error {
 	for i := 0; i < 3; i++ {
-		_, err := s.db.ExecContext(ctx,
+		result, err := s.db.ExecContext(ctx,
 			`INSERT INTO alert_events (timestamp, rule_name, target, message, severity)
 			 VALUES (?, ?, ?, ?, ?)`,
 			event.Timestamp, event.RuleName, event.Target, event.Message, event.Severity,
 		)
 		if err == nil {
+			_ = result
 			return nil
 		}
 		// Retry on database locked
