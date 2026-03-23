@@ -195,18 +195,3 @@ func (e *Engine) checkVMStopped(rule Rule, results []checker.CheckResult) []rule
 	}
 	return matches
 }
-
-func severityName(s int) string {
-	switch s {
-	case 4:
-		return "critical"
-	case 3:
-		return "high"
-	case 2:
-		return "medium"
-	case 1:
-		return "low"
-	default:
-		return "info"
-	}
-}
