@@ -116,28 +116,23 @@ func apiError(w http.ResponseWriter, err error, msg string, status int) {
 
 // getNodeStats extracts node stats from latest data points.
 func getNodeStats(s *store.Store) []NodeStat {
-	nodeTargets, _ := s.GetAllTargetsWithMetric(context.Background(), "node.cpu.percent")
+	// Get all node stats in a single batch query
+	nodeStats, err := s.GetAllNodeStats(context.Background())
+	if err != nil {
+		log.Printf("getNodeStats: failed to get node stats: %v", err)
+		return nil
+	}
 
 	var nodes []NodeStat
-	for _, target := range nodeTargets {
+	for target, metrics := range nodeStats {
 		name := strings.TrimPrefix(target, "node:")
 
-		cpuDP, _ := s.GetLatestDataPoint(context.Background(), target, "node.cpu.percent")
-		memDP, _ := s.GetLatestDataPoint(context.Background(), target, "node.mem.percent")
-		uptimeDP, _ := s.GetLatestDataPoint(context.Background(), target, "node.uptime")
+		cpu := metrics["node.cpu.percent"]
+		mem := metrics["node.mem.percent"]
 
-		cpu := 0.0
-		mem := 0.0
 		uptime := "unknown"
-
-		if cpuDP != nil {
-			cpu = cpuDP.Value
-		}
-		if memDP != nil {
-			mem = memDP.Value
-		}
-		if uptimeDP != nil {
-			uptime = formatUptime(int64(uptimeDP.Value))
+		if uptimeVal, ok := metrics["node.uptime"]; ok && uptimeVal > 0 {
+			uptime = formatUptime(int64(uptimeVal))
 		}
 
 		nodes = append(nodes, NodeStat{
