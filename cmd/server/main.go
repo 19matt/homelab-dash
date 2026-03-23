@@ -208,7 +208,7 @@ func registerCheckers(sched *scheduler.Scheduler, t config.TargetConfig) {
 			sched.AddChecker(checker.NewPingChecker(t.Name, t.Host, port))
 		case "http":
 			for _, ep := range t.Endpoint {
-				sched.AddChecker(checker.NewHTTPChecker(t.Name, t.Host, ep.Port, ep.Protocol))
+				sched.AddChecker(checker.NewHTTPChecker(t.Name, t.Host, ep.Port, ep.Protocol, t.ShouldVerifyTLS()))
 			}
 		}
 	}

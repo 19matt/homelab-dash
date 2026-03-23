@@ -161,7 +161,7 @@ func (sc *Scheduler) Run(ctx context.Context) {
 				checkers = append(checkers, ce)
 			case "http":
 				for _, ep := range t.Endpoint {
-					ce := checkerEntry{checker: checker.NewHTTPChecker(t.Name, t.Host, ep.Port, ep.Protocol), interval: sc.interval}
+					ce := checkerEntry{checker: checker.NewHTTPChecker(t.Name, t.Host, ep.Port, ep.Protocol, t.ShouldVerifyTLS()), interval: sc.interval}
 					checkers = append(checkers, ce)
 				}
 			}
@@ -270,7 +270,7 @@ func (sc *Scheduler) registerTarget(target config.TargetConfig) {
 			go sc.runChecker(childCtx, checkerEntry{checker: c, interval: sc.interval}, startupDelay)
 		case "http":
 			for _, ep := range target.Endpoint {
-				c := checker.NewHTTPChecker(target.Name, target.Host, ep.Port, ep.Protocol)
+				c := checker.NewHTTPChecker(target.Name, target.Host, ep.Port, ep.Protocol, target.ShouldVerifyTLS())
 				childCtx, childCancel := context.WithCancel(sc.ctx)
 				checkerCancels = append(checkerCancels, childCancel)
 				// Use existing checker count to calculate startup delay

@@ -165,7 +165,7 @@ func TestTargetHandler() http.HandlerFunc {
 				result, _ := c.Check(ctx)
 				results["ping"] = result.Status.String()
 			case "http":
-				c := checker.NewHTTPChecker("test", req.Host, req.Port, "http")
+				c := checker.NewHTTPChecker("test", req.Host, req.Port, "http", false)
 				result, _ := c.Check(ctx)
 				results["http"] = result.Status.String()
 			}

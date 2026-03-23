@@ -56,10 +56,23 @@ type TargetConfig struct {
 
 	Checks []string `yaml:"checks"`
 
+	// TLSVerify controls TLS certificate verification for HTTP checks.
+	// Default is true (secure). Set to false to skip verification for self-signed certs.
+	TLSVerify *bool `yaml:"tls_verify,omitempty"`
+
 	// Ports supports both int and "protocol:port" string formats.
 	// Parsed into Endpoints during validation.
 	Ports    []interface{} `yaml:"ports"`
 	Endpoint []Endpoint    `yaml:"-"`
+}
+
+// ShouldVerifyTLS returns true if TLS verification should be enabled.
+// Defaults to true if TLSVerify is not set.
+func (t TargetConfig) ShouldVerifyTLS() bool {
+	if t.TLSVerify == nil {
+		return true // Secure by default
+	}
+	return *t.TLSVerify
 }
 
 // Endpoint represents a protocol+port pair for a target.
@@ -161,7 +174,7 @@ func (c *Config) Save() error {
 		return fmt.Errorf("config: marshal: %w", err)
 	}
 
-	if err := os.WriteFile(c.configPath, data, 0644); err != nil {
+	if err := os.WriteFile(c.configPath, data, 0600); err != nil {
 		return fmt.Errorf("config: write %s: %w", c.configPath, err)
 	}
 

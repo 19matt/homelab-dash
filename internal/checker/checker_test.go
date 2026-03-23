@@ -56,7 +56,7 @@ func TestHTTPChecker_200(t *testing.T) {
 	}))
 	defer server.Close()
 
-	c := NewHTTPChecker("test", "127.0.0.1", 0, "http")
+	c := NewHTTPChecker("test", "127.0.0.1", 0, "http", false)
 	// Override the URL to use the test server
 	c.url = server.URL
 
@@ -77,7 +77,7 @@ func TestHTTPChecker_404(t *testing.T) {
 	}))
 	defer server.Close()
 
-	c := NewHTTPChecker("test", "127.0.0.1", 0, "http")
+	c := NewHTTPChecker("test", "127.0.0.1", 0, "http", false)
 	c.url = server.URL
 
 	ctx := context.Background()
@@ -97,7 +97,7 @@ func TestHTTPChecker_500(t *testing.T) {
 	}))
 	defer server.Close()
 
-	c := NewHTTPChecker("test", "127.0.0.1", 0, "http")
+	c := NewHTTPChecker("test", "127.0.0.1", 0, "http", false)
 	c.url = server.URL
 
 	ctx := context.Background()
@@ -112,7 +112,7 @@ func TestHTTPChecker_500(t *testing.T) {
 }
 
 func TestHTTPChecker_Name(t *testing.T) {
-	c := NewHTTPChecker("test", "127.0.0.1", 8080, "http")
+	c := NewHTTPChecker("test", "127.0.0.1", 8080, "http", false)
 	if c.Name() != "http:8080" {
 		t.Errorf("expected 'http:8080', got '%s'", c.Name())
 	}

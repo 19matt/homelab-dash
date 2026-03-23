@@ -12,21 +12,24 @@ import (
 
 // HTTPChecker performs an HTTP request and validates the response status code.
 type HTTPChecker struct {
-	target   string
-	url      string
-	port     int
-	expected int
-	timeout  time.Duration
+	target    string
+	url       string
+	port      int
+	expected  int
+	timeout   time.Duration
+	verifyTLS bool
 }
 
 // NewHTTPChecker creates an HTTPChecker for the given target and scheme/port.
-func NewHTTPChecker(target, host string, port int, scheme string) *HTTPChecker {
+// verifyTLS controls whether TLS certificate verification is performed.
+func NewHTTPChecker(target, host string, port int, scheme string, verifyTLS bool) *HTTPChecker {
 	return &HTTPChecker{
-		target:   target,
-		url:      fmt.Sprintf("%s://%s:%d", scheme, host, port),
-		port:     port,
-		expected: 200,
-		timeout:  10 * time.Second,
+		target:    target,
+		url:       fmt.Sprintf("%s://%s:%d", scheme, host, port),
+		port:      port,
+		expected:  200,
+		timeout:   10 * time.Second,
+		verifyTLS: verifyTLS,
 	}
 }
 
@@ -41,7 +44,7 @@ func (h *HTTPChecker) Check(ctx context.Context) (CheckResult, error) {
 		Timeout: h.timeout,
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true,
+				InsecureSkipVerify: !h.verifyTLS,
 			},
 		},
 	}
