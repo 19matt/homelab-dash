@@ -30,14 +30,13 @@ func (s *Store) SaveAuditEvent(ctx context.Context, event AuditEvent) error {
 	if event.Target == "" {
 		event.Target = "-"
 	}
-	result, err := s.db.ExecContext(ctx,
+	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO audit_events (timestamp, type, target, message) VALUES (?, ?, ?, ?)`,
 		event.Timestamp, event.Type, event.Target, event.Message,
 	)
 	if err != nil {
 		return fmt.Errorf("store: save audit event: %w", err)
 	}
-	_ = result
 	return nil
 }
 

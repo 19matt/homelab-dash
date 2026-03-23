@@ -73,8 +73,7 @@ func (s *Store) SaveFindings(ctx context.Context, findings []Finding) error {
 	}
 
 	// Clear current findings
-	if result, err := tx.ExecContext(ctx, `DELETE FROM findings`); err != nil {
-		_ = result
+	if _, err := tx.ExecContext(ctx, `DELETE FROM findings`); err != nil {
 		return fmt.Errorf("store: clear findings: %w", err)
 	}
 
@@ -89,9 +88,8 @@ func (s *Store) SaveFindings(ctx context.Context, findings []Finding) error {
 		defer stmt.Close()
 
 		for _, f := range findings {
-			if result, err := stmt.ExecContext(ctx,
+			if _, err := stmt.ExecContext(ctx,
 				f.Timestamp, f.Target, f.Scanner, f.Title, f.Description, f.Severity, f.Remediation, f.ScanID); err != nil {
-				_ = result
 				return fmt.Errorf("store: insert finding: %w", err)
 			}
 

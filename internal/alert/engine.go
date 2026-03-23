@@ -69,6 +69,16 @@ func (e *Engine) Evaluate(
 				// First time seeing this condition
 				e.firing[key] = now
 				e.fired[key] = false
+				// If duration is 0, fire immediately
+				if rule.Duration == 0 {
+					alerts = append(alerts, FiredAlert{
+						Rule:    rule,
+						Target:  m.target,
+						Message: m.message,
+						FiredAt: now,
+					})
+					e.fired[key] = true
+				}
 			}
 		}
 	}

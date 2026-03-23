@@ -5,8 +5,14 @@ import (
 	"html/template"
 	"io/fs"
 	"net/http"
+	"time"
 
 	"github.com/homelab/homelab-dash/internal/config"
+	"github.com/homelab/homelab-dash/internal/integration/frigate"
+	"github.com/homelab/homelab-dash/internal/integration/jellyfin"
+	"github.com/homelab/homelab-dash/internal/integration/proxmox"
+	"github.com/homelab/homelab-dash/internal/scheduler"
+	"github.com/homelab/homelab-dash/internal/store"
 	"github.com/homelab/homelab-dash/internal/web/handlers"
 )
 
@@ -21,8 +27,16 @@ type Server struct {
 // NewServer creates a new web server with all routes registered.
 func NewServer(
 	cfg config.ServerConfig,
-	deps *ServerDependencies,
-	versionInfo *ServerVersion,
+	s *store.Store,
+	hub *Hub,
+	vmCollectors []*proxmox.VMCollector,
+	jellyfinClient *jellyfin.Client,
+	frigateClient *frigate.Client,
+	cfgMgr *config.Manager,
+	sched *scheduler.Scheduler,
+	version, buildTime string,
+	startTime time.Time,
+	integrationsEnabled []string,
 ) (*Server, error) {
 	// Parse templates
 	tmpl, err := template.New("").Funcs(handlers.TemplateFuncMap).ParseFS(StaticFS, "templates/*.html")
@@ -48,77 +62,76 @@ func NewServer(
 	})
 
 	// SSE
-	mux.Handle("GET /events", deps.Hub)
+	mux.Handle("GET /events", hub)
 
 	// JSON API
-	mux.HandleFunc("GET /api/status", handlers.StatusHandler(deps.Store))
-	mux.HandleFunc("GET /api/uptime", handlers.UptimeHandler(deps.Store))
-	mux.HandleFunc("GET /api/uptime/daily", handlers.DailyUptimeHandler(deps.Store))
-	mux.HandleFunc("GET /api/metrics/latest", handlers.MetricsLatestHandler(deps.Store))
-	mux.HandleFunc("GET /api/metrics/history", handlers.MetricsHistoryHandler(deps.Store))
-	mux.HandleFunc("GET /api/metrics/targets", handlers.MetricsTargetsHandler(deps.Store))
-	if len(deps.VMCollectors) > 0 {
-		mux.HandleFunc("GET /api/proxmox/vms", handlers.ProxmoxVMsHandlerMulti(deps.VMCollectors))
+	mux.HandleFunc("GET /api/status", handlers.StatusHandler(s))
+	mux.HandleFunc("GET /api/uptime", handlers.UptimeHandler(s))
+	mux.HandleFunc("GET /api/uptime/daily", handlers.DailyUptimeHandler(s))
+	mux.HandleFunc("GET /api/metrics/latest", handlers.MetricsLatestHandler(s))
+	mux.HandleFunc("GET /api/metrics/history", handlers.MetricsHistoryHandler(s))
+	mux.HandleFunc("GET /api/metrics/targets", handlers.MetricsTargetsHandler(s))
+	if len(vmCollectors) > 0 {
+		mux.HandleFunc("GET /api/proxmox/vms", handlers.ProxmoxVMsHandlerMulti(vmCollectors))
 	}
 
 	// Security API
-	mux.HandleFunc("GET /api/security/findings", handlers.FindingsHandler(deps.Store))
-	mux.HandleFunc("GET /api/security/summary", handlers.SummaryHandler(deps.Store))
-	mux.HandleFunc("GET /api/security/report", handlers.ReportHandler(deps.Store))
-	mux.HandleFunc("GET /api/security/resolved", handlers.ResolvedFindingsHandler(deps.Store))
+	mux.HandleFunc("GET /api/security/findings", handlers.FindingsHandler(s))
+	mux.HandleFunc("GET /api/security/summary", handlers.SummaryHandler(s))
+	mux.HandleFunc("GET /api/security/report", handlers.ReportHandler(s))
+	mux.HandleFunc("GET /api/security/resolved", handlers.ResolvedFindingsHandler(s))
 
 	// Alerts API
-	mux.HandleFunc("GET /api/alerts/events", handlers.AlertEventsHandler(deps.Store))
+	mux.HandleFunc("GET /api/alerts/events", handlers.AlertEventsHandler(s))
 
 	// Admin API
-	mux.HandleFunc("GET /admin/status", handlers.AdminStatusHandler(deps.Store, versionInfo.Version, versionInfo.BuildTime, versionInfo.StartTime, deps.Integrations))
+	mux.HandleFunc("GET /admin/status", handlers.AdminStatusHandler(s, version, buildTime, startTime, integrationsEnabled))
 
 	// Audit API
-	mux.HandleFunc("GET /api/audit/events", handlers.AuditEventsHandler(deps.Store))
+	mux.HandleFunc("GET /api/audit/events", handlers.AuditEventsHandler(s))
 
 	// Settings API
-	mux.HandleFunc("POST /api/targets", handlers.AddTargetHandler(deps.ConfigManager, deps.Store))
-	mux.HandleFunc("DELETE /api/targets/{name}", handlers.RemoveTargetHandler(deps.ConfigManager, deps.Store))
+	mux.HandleFunc("POST /api/targets", handlers.AddTargetHandler(cfgMgr, s))
+	mux.HandleFunc("DELETE /api/targets/{name}", handlers.RemoveTargetHandler(cfgMgr, s))
 	mux.HandleFunc("POST /api/targets/test", handlers.TestTargetHandler())
 
 	// Page handlers
-	mux.HandleFunc("GET /{$}", handlers.OverviewHandler(tmpl, deps.Store, deps.VMCollectors, deps.JellyfinClient, deps.FrigateClient))
-	mux.HandleFunc("GET /services", handlers.ServicesHandler(tmpl, deps.Store))
-	mux.HandleFunc("GET /proxmox", handlers.ProxmoxHandler(tmpl, deps.Store, deps.VMCollectors))
-	mux.HandleFunc("GET /metrics", handlers.MetricsHandler(tmpl, deps.Store))
-	mux.HandleFunc("GET /security", handlers.SecurityHandler(tmpl, deps.Store))
-	mux.HandleFunc("GET /alerts", handlers.AlertsHandler(tmpl, deps.Store))
-	mux.HandleFunc("GET /host/{target...}", handlers.HostHandler(tmpl, deps.Store))
-	mux.HandleFunc("GET /settings", handlers.SettingsHandler(tmpl, deps.ConfigManager.Get()))
-	mux.HandleFunc("GET /audit", handlers.AuditHandler(tmpl, deps.Store))
+	mux.HandleFunc("GET /{$}", handlers.OverviewHandler(tmpl, s, vmCollectors, jellyfinClient, frigateClient))
+	mux.HandleFunc("GET /services", handlers.ServicesHandler(tmpl, s))
+	mux.HandleFunc("GET /proxmox", handlers.ProxmoxHandler(tmpl, s, vmCollectors))
+	mux.HandleFunc("GET /metrics", handlers.MetricsHandler(tmpl, s))
+	mux.HandleFunc("GET /security", handlers.SecurityHandler(tmpl, s))
+	mux.HandleFunc("GET /alerts", handlers.AlertsHandler(tmpl, s))
+	mux.HandleFunc("GET /host/{target...}", handlers.HostHandler(tmpl, s))
+	mux.HandleFunc("GET /settings", handlers.SettingsHandler(tmpl, cfgMgr.Get()))
+	mux.HandleFunc("GET /audit", handlers.AuditHandler(tmpl, s))
 
 	// Conditional integration pages
-	if deps.JellyfinClient != nil {
-		mux.HandleFunc("GET /jellyfin", handlers.JellyfinHandler(tmpl, deps.JellyfinClient))
+	if jellyfinClient != nil {
+		mux.HandleFunc("GET /jellyfin", handlers.JellyfinHandler(tmpl, jellyfinClient))
 	}
-	if deps.FrigateClient != nil {
-		mux.HandleFunc("GET /frigate", handlers.FrigateHandler(tmpl, deps.FrigateClient))
+	if frigateClient != nil {
+		mux.HandleFunc("GET /frigate", handlers.FrigateHandler(tmpl, frigateClient))
 	}
 
 	// Htmx fragment handlers
-	mux.HandleFunc("GET /fragments/status-grid", handlers.StatusGridFragment(tmpl, deps.Store))
-	mux.HandleFunc("GET /fragments/proxmox-summary", handlers.ProxmoxSummaryFragment(tmpl, deps.Store, deps.VMCollectors))
-	mux.HandleFunc("GET /fragments/vm-table", handlers.VMTableFragment(tmpl, deps.VMCollectors))
-	mux.HandleFunc("GET /fragments/security-summary", handlers.SecuritySummaryFragment(tmpl, deps.Store))
-	mux.HandleFunc("GET /fragments/findings-badge", handlers.FindingsBadgeFragment(deps.Store))
+	mux.HandleFunc("GET /fragments/status-grid", handlers.StatusGridFragment(tmpl, s))
+	mux.HandleFunc("GET /fragments/proxmox-summary", handlers.ProxmoxSummaryFragment(tmpl, s, vmCollectors))
+	mux.HandleFunc("GET /fragments/vm-table", handlers.VMTableFragment(tmpl, vmCollectors))
+	mux.HandleFunc("GET /fragments/security-summary", handlers.SecuritySummaryFragment(tmpl, s))
+	mux.HandleFunc("GET /fragments/findings-badge", handlers.FindingsBadgeFragment(s))
 
-	if deps.JellyfinClient != nil {
-		mux.HandleFunc("GET /fragments/jellyfin-summary", handlers.JellyfinSummaryFragment(deps.JellyfinClient))
+	if jellyfinClient != nil {
+		mux.HandleFunc("GET /fragments/jellyfin-summary", handlers.JellyfinSummaryFragment(jellyfinClient))
 	}
-	if deps.FrigateClient != nil {
-		mux.HandleFunc("GET /fragments/frigate-summary", handlers.FrigateSummaryFragment(deps.FrigateClient))
+	if frigateClient != nil {
+		mux.HandleFunc("GET /fragments/frigate-summary", handlers.FrigateSummaryFragment(frigateClient))
 	}
 
 	// Wrap with auth if enabled
 	var handler http.Handler = mux
-	if deps.ConfigManager.Get().Server.Auth.Enabled {
-		cfg := deps.ConfigManager.Get()
-		handler = BasicAuth(cfg.Server.Auth.Username, cfg.Server.Auth.Password, mux, "/health", "/static/")
+	if cfg.Auth.Enabled {
+		handler = BasicAuth(cfg.Auth.Username, cfg.Auth.Password, mux, "/health", "/static/")
 	}
 
 	return &Server{Handler: handler}, nil

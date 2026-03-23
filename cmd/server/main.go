@@ -155,21 +155,7 @@ func main() {
 	}
 
 	// Create web server with all routes
-	deps := &web.ServerDependencies{
-		Store:          s,
-		Hub:            hub,
-		VMCollectors:   vmCollectors,
-		JellyfinClient: jellyfinClient,
-		FrigateClient:  frigateClient,
-		ConfigManager:  cfgMgr,
-		Integrations:   integrationsEnabled,
-	}
-	versionInfo := &web.ServerVersion{
-		Version:   Version,
-		BuildTime: BuildTime,
-		StartTime: startTime,
-	}
-	srv, err := web.NewServer(cfg.Server, deps, versionInfo)
+	srv, err := web.NewServer(cfg.Server, s, hub, vmCollectors, jellyfinClient, frigateClient, cfgMgr, sched, Version, BuildTime, startTime, integrationsEnabled)
 	if err != nil {
 		log.Fatalf("failed to create web server: %v", err)
 	}

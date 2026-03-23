@@ -19,15 +19,13 @@ func Open(path string) (*Store, error) {
 		return nil, fmt.Errorf("store: open %s: %w", path, err)
 	}
 
-	if result, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
+	if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
 		db.Close()
-		_ = result
 		return nil, fmt.Errorf("store: set journal_mode: %w", err)
 	}
 
-	if result, err := db.Exec("PRAGMA busy_timeout=5000"); err != nil {
+	if _, err := db.Exec("PRAGMA busy_timeout=5000"); err != nil {
 		db.Close()
-		_ = result
 		return nil, fmt.Errorf("store: set busy_timeout: %w", err)
 	}
 
@@ -44,13 +42,12 @@ func Open(path string) (*Store, error) {
 // runMigrations creates the schema_versions table and applies pending migrations.
 func (s *Store) runMigrations() error {
 	// Create schema_versions table
-	if result, err := s.db.Exec(`
+	if _, err := s.db.Exec(`
 		CREATE TABLE IF NOT EXISTS schema_versions (
 			version TEXT PRIMARY KEY,
 			applied_at DATETIME NOT NULL
 		)
 	`); err != nil {
-		_ = result
 		return fmt.Errorf("create schema_versions: %w", err)
 	}
 
