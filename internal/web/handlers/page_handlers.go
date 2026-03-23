@@ -16,7 +16,7 @@ import (
 )
 
 // OverviewHandler renders the overview page.
-func OverviewHandler(tmpl *template.Template, s *store.Store, vmCollectors []*proxmox.VMCollector, jellyfinClient *jellyfin.Client, frigateClient *frigate.Client) http.HandlerFunc {
+func OverviewHandler(tmpl *template.Template, s *store.Store, vmCollectors []*proxmox.VMCollector, jellyfinClient JellyfinClient, frigateClient FrigateClient) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		results, err := s.GetLatestCheckResults(r.Context())
 		if err != nil {
@@ -472,7 +472,7 @@ func AlertsHandler(tmpl *template.Template, s *store.Store) http.HandlerFunc {
 }
 
 // JellyfinHandler renders the Jellyfin page.
-func JellyfinHandler(tmpl *template.Template, client *jellyfin.Client) http.HandlerFunc {
+func JellyfinHandler(tmpl *template.Template, client JellyfinClient) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 
@@ -528,7 +528,7 @@ func JellyfinHandler(tmpl *template.Template, client *jellyfin.Client) http.Hand
 }
 
 // FrigateHandler renders the Frigate page.
-func FrigateHandler(tmpl *template.Template, client *frigate.Client) http.HandlerFunc {
+func FrigateHandler(tmpl *template.Template, client FrigateClient) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 

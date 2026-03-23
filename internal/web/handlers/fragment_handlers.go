@@ -5,8 +5,6 @@ import (
 	"html/template"
 	"net/http"
 
-	"github.com/homelab/homelab-dash/internal/integration/frigate"
-	"github.com/homelab/homelab-dash/internal/integration/jellyfin"
 	"github.com/homelab/homelab-dash/internal/integration/proxmox"
 	"github.com/homelab/homelab-dash/internal/store"
 )
@@ -93,7 +91,7 @@ func FindingsBadgeFragment(s *store.Store) http.HandlerFunc {
 }
 
 // JellyfinSummaryFragment returns the Jellyfin summary widget.
-func JellyfinSummaryFragment(client *jellyfin.Client) http.HandlerFunc {
+func JellyfinSummaryFragment(client JellyfinClient) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 
@@ -136,7 +134,7 @@ func JellyfinSummaryFragment(client *jellyfin.Client) http.HandlerFunc {
 }
 
 // FrigateSummaryFragment returns the Frigate summary widget.
-func FrigateSummaryFragment(client *frigate.Client) http.HandlerFunc {
+func FrigateSummaryFragment(client FrigateClient) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 
